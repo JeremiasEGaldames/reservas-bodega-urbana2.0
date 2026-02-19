@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth';
 
@@ -43,13 +44,14 @@ export default function LoginPage() {
             <div className="w-full max-w-md animate-fade-in">
                 {/* Logo & Header */}
                 <div className="text-center mb-8">
-                    <div
-                        className="inline-flex items-center justify-center w-16 h-16 rounded-2xl mb-4"
-                        style={{ background: 'var(--color-primary)', boxShadow: '0 8px 24px rgba(212,17,66,0.25)' }}
-                    >
-                        <svg className="w-8 h-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M12 8.25v-1.5m0 1.5c-1.355 0-2.697.056-4.024.166C6.845 8.51 6 9.473 6 10.608v2.513m6-4.871c1.355 0 2.697.056 4.024.166C17.155 8.51 18 9.473 18 10.608v2.513M15 8.25v-1.5m-6 1.5v-1.5m12 9.75-3.223-3.223c-.3-.3-.713-.477-1.14-.477H9.363c-.427 0-.84.177-1.14.477L5 19.5" />
-                        </svg>
+                    <div className="relative w-20 h-20 mx-auto mb-4">
+                        <Image
+                            src="/logo.png"
+                            alt="Huentala Wines Logo"
+                            fill
+                            className="object-contain"
+                            priority
+                        />
                     </div>
                     <h1 className="text-2xl font-bold" style={{ color: 'var(--color-text)' }}>
                         Huentala Wines

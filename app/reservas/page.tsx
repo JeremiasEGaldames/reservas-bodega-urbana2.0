@@ -8,9 +8,10 @@ import CalendarView from '@/components/CalendarView';
 import DayDetailPanel from '@/components/DayDetailPanel';
 import ReservationForm from '@/components/ReservationForm';
 import ReservationList from '@/components/ReservationList';
+import ConfirmModal from '@/components/ConfirmModal';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth';
-import type { Disponibilidad, Visita, TurnoStatus } from '@/lib/types';
+import type { Disponibilidad, Visita, TurnoStatus, ReservaFormData } from '@/lib/types';
 
 export default function ReservasPage() {
     return (
@@ -27,6 +28,13 @@ function ReservasContent() {
     const [disponibilidad, setDisponibilidad] = useState<Disponibilidad[]>([]);
     const [visitas, setVisitas] = useState<Visita[]>([]);
     const [loading, setLoading] = useState(true);
+    const [editingVisita, setEditingVisita] = useState<Visita | null>(null);
+    const [confirmModal, setConfirmModal] = useState<{
+        open: boolean;
+        title: string;
+        message: string;
+        onConfirm: () => void;
+    }>({ open: false, title: '', message: '', onConfirm: () => { } });
 
     const fetchData = useCallback(async () => {
         setLoading(true);
@@ -85,7 +93,7 @@ function ReservasContent() {
 
         return dayDisp.map((d) => {
             const reservas = dayVisitas
-                .filter((v) => v.idioma === d.idioma)
+                .filter((v) => v.idioma === d.idioma && v.id !== editingVisita?.id) // Excluir la propia reserva al editar para no contar doble si se mantiene el turno
                 .reduce((sum, v) => sum + v.cantidad_huespedes, 0);
 
             return {
@@ -102,7 +110,7 @@ function ReservasContent() {
         });
     };
 
-    const handleCreateReserva = async (data: { nombre: string; apellido: string; hotel: string; email: string; telefono: string; cantidad_huespedes: number; idioma: string; notas: string; fecha: string; horario: string }) => {
+    const handleCreateReserva = async (data: ReservaFormData & { fecha: string; horario: string }) => {
         const { error } = await supabase.from('visitas').insert({
             fecha: data.fecha,
             horario: data.horario,
@@ -115,14 +123,74 @@ function ReservasContent() {
             cantidad_huespedes: data.cantidad_huespedes,
             notas: data.notas || null,
             created_by: user?.id || null,
-            estado: 'pendiente',
+            estado: 'confirmada',
         });
 
         if (error) throw error;
         fetchData();
     };
 
+    const handleUpdateReserva = async (data: ReservaFormData & { fecha: string; horario: string }) => {
+        if (!editingVisita) return;
+
+        const { error } = await supabase.from('visitas').update({
+            // fecha: data.fecha, // Por ahora mantenemos la fecha original, o podríamos permitir cambiarla
+            horario: data.horario,
+            idioma: data.idioma,
+            nombre: data.nombre,
+            apellido: data.apellido,
+            hotel: data.hotel,
+            email: data.hotel === 'Externo' ? data.email : null,
+            telefono: data.hotel === 'Externo' ? data.telefono : null,
+            cantidad_huespedes: data.cantidad_huespedes,
+            notas: data.notas || null,
+            updated_at: new Date().toISOString()
+        }).eq('id', editingVisita.id);
+
+        if (error) throw error;
+        setEditingVisita(null);
+        fetchData();
+    };
+
+    const handleDelete = (id: string) => {
+        setConfirmModal({
+            open: true,
+            title: 'Eliminar reserva',
+            message: '¿Estás seguro de que querés eliminar esta reserva? Esta acción liberará los cupos inmediatamente.',
+            onConfirm: async () => {
+                const { error } = await supabase.from('visitas').delete().eq('id', id);
+                if (error) {
+                    console.error('Error al eliminar:', error);
+                    alert(`Error al eliminar la reserva: ${error.message}`);
+                    return;
+                }
+                setConfirmModal((prev) => ({ ...prev, open: false }));
+                if (editingVisita?.id === id) setEditingVisita(null);
+                fetchData();
+            },
+        });
+    };
+
+    const handleChangeStatus = async (id: string, estado: Visita['estado']) => {
+        await supabase.from('visitas').update({
+            estado,
+            updated_at: new Date().toISOString()
+        }).eq('id', id);
+        fetchData();
+    };
+
     const turnos = selectedDate ? getTurnos(selectedDate) : [];
+
+    const initialFormData: Partial<ReservaFormData> | undefined = editingVisita ? {
+        nombre: editingVisita.nombre,
+        apellido: editingVisita.apellido,
+        hotel: editingVisita.hotel,
+        email: editingVisita.email || '',
+        telefono: editingVisita.telefono || '',
+        cantidad_huespedes: editingVisita.cantidad_huespedes,
+        idioma: editingVisita.idioma,
+        notas: editingVisita.notas || '',
+    } : undefined;
 
     return (
         <div className="min-h-screen" style={{ background: 'var(--color-bg)' }}>
@@ -152,7 +220,10 @@ function ReservasContent() {
                                     selectedDate={selectedDate}
                                     disponibilidad={disponibilidad}
                                     visitas={visitas}
-                                    onSelectDate={setSelectedDate}
+                                    onSelectDate={(date) => {
+                                        setSelectedDate(date);
+                                        setEditingVisita(null); // Reset admin mode on date change
+                                    }}
                                     onPrevMonth={() => setCurrentMonth(subMonths(currentMonth, 1))}
                                     onNextMonth={() => setCurrentMonth(addMonths(currentMonth, 1))}
                                 />
@@ -174,6 +245,10 @@ function ReservasContent() {
                                             <ReservationList
                                                 visitas={visitas}
                                                 selectedDate={selectedDate}
+                                                showActions={true}
+                                                onDelete={handleDelete}
+                                                onEdit={(v) => setEditingVisita(v)}
+                                                onChangeStatus={handleChangeStatus}
                                             />
                                         </div>
                                     </div>
@@ -189,9 +264,13 @@ function ReservasContent() {
                                             turnos={turnos}
                                         />
                                         <ReservationForm
+                                            key={editingVisita ? `edit-${editingVisita.id}` : 'new'} // Force re-render on mode change
                                             selectedDate={selectedDate}
                                             turnos={turnos}
-                                            onSubmit={handleCreateReserva}
+                                            initialData={initialFormData}
+                                            isEditing={!!editingVisita}
+                                            onSubmit={editingVisita ? handleUpdateReserva : handleCreateReserva}
+                                            onCancel={editingVisita ? () => setEditingVisita(null) : undefined}
                                         />
                                     </>
                                 ) : (
@@ -219,6 +298,14 @@ function ReservasContent() {
                     )}
                 </div>
             </main>
+
+            <ConfirmModal
+                open={confirmModal.open}
+                title={confirmModal.title}
+                message={confirmModal.message}
+                onConfirm={confirmModal.onConfirm}
+                onCancel={() => setConfirmModal({ ...confirmModal, open: false })}
+            />
         </div>
     );
 }

@@ -1,8 +1,9 @@
 'use client';
 
 import { useAuth } from '@/lib/auth';
-import { useRouter, usePathname } from 'next/navigation';
+import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import { useState } from 'react';
+import Image from 'next/image';
 import type { RolUsuario } from '@/lib/types';
 
 interface NavItem {
@@ -102,7 +103,7 @@ export default function Navbar({ role }: NavbarProps) {
 
     const navItems = role === 'admin' ? adminNavItems : recepcionNavItems;
 
-    const searchParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : new URLSearchParams();
+    const searchParams = useSearchParams();
     const currentTab = searchParams.get('tab');
 
     const isActive = (item: NavItem) => {
@@ -129,13 +130,14 @@ export default function Navbar({ role }: NavbarProps) {
                 }}
             >
                 <div className="flex items-center gap-2">
-                    <div
-                        className="w-8 h-8 rounded-lg flex items-center justify-center"
-                        style={{ background: 'var(--color-primary)' }}
-                    >
-                        <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M12 8.25v-1.5m0 1.5c-1.355 0-2.697.056-4.024.166C6.845 8.51 6 9.473 6 10.608v2.513m6-4.871c1.355 0 2.697.056 4.024.166C17.155 8.51 18 9.473 18 10.608v2.513M15 8.25v-1.5m-6 1.5v-1.5m12 9.75-3.223-3.223c-.3-.3-.713-.477-1.14-.477H9.363c-.427 0-.84.177-1.14.477L5 19.5" />
-                        </svg>
+                    <div className="relative w-8 h-8 flex-shrink-0">
+                        <Image
+                            src="/logo.png"
+                            alt="Huentala Wines Logo"
+                            fill
+                            className="object-contain"
+                            priority
+                        />
                     </div>
                     <span className="text-sm font-semibold" style={{ color: 'var(--color-text)' }}>Huentala Wines</span>
                 </div>
@@ -176,13 +178,14 @@ export default function Navbar({ role }: NavbarProps) {
             >
                 {/* Logo */}
                 <div className="px-5 py-5 flex items-center gap-3" style={{ borderBottom: '1px solid var(--color-border-light)' }}>
-                    <div
-                        className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0"
-                        style={{ background: 'var(--color-primary)' }}
-                    >
-                        <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M12 8.25v-1.5m0 1.5c-1.355 0-2.697.056-4.024.166C6.845 8.51 6 9.473 6 10.608v2.513m6-4.871c1.355 0 2.697.056 4.024.166C17.155 8.51 18 9.473 18 10.608v2.513M15 8.25v-1.5m-6 1.5v-1.5m12 9.75-3.223-3.223c-.3-.3-.713-.477-1.14-.477H9.363c-.427 0-.84.177-1.14.477L5 19.5" />
-                        </svg>
+                    <div className="relative w-9 h-9 flex-shrink-0">
+                        <Image
+                            src="/logo.png"
+                            alt="Huentala Wines Logo"
+                            fill
+                            className="object-contain"
+                            priority
+                        />
                     </div>
                     <div>
                         <p className="text-sm font-bold leading-tight" style={{ color: 'var(--color-text)' }}>Huentala Wines</p>

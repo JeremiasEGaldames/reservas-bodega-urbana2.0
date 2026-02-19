@@ -75,8 +75,10 @@ create policy "Allow admin write access" on public.disponibilidad for all using 
 -- Visitas: public insert (for reception), read all (for admin/reception)
 create policy "Allow public insert" on public.visitas for insert with check (true);
 create policy "Allow authenticated read" on public.visitas for select using (true);
-create policy "Allow authenticated update" on public.visitas for update using (true);
-create policy "Allow authenticated delete" on public.visitas for delete using (true);
+-- Added anon policies (since custom auth is used)
+create policy "anon_read_visitas" on public.visitas for select using (true);
+create policy "anon_update_visitas" on public.visitas for update using (true);
+create policy "anon_delete_visitas" on public.visitas for delete using (true);
 
 -- Initial Data
 insert into public.configuracion (clave, valor) values
