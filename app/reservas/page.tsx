@@ -1,0 +1,224 @@
+'use client';
+
+import { useState, useEffect, useCallback } from 'react';
+import { addMonths, subMonths, format } from 'date-fns';
+import ProtectedRoute from '@/components/ProtectedRoute';
+import Navbar from '@/components/Navbar';
+import CalendarView from '@/components/CalendarView';
+import DayDetailPanel from '@/components/DayDetailPanel';
+import ReservationForm from '@/components/ReservationForm';
+import ReservationList from '@/components/ReservationList';
+import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/lib/auth';
+import type { Disponibilidad, Visita, TurnoStatus } from '@/lib/types';
+
+export default function ReservasPage() {
+    return (
+        <ProtectedRoute allowedRoles={['recepcion', 'admin']}>
+            <ReservasContent />
+        </ProtectedRoute>
+    );
+}
+
+function ReservasContent() {
+    const { user } = useAuth();
+    const [currentMonth, setCurrentMonth] = useState(new Date());
+    const [selectedDate, setSelectedDate] = useState<string | null>(null);
+    const [disponibilidad, setDisponibilidad] = useState<Disponibilidad[]>([]);
+    const [visitas, setVisitas] = useState<Visita[]>([]);
+    const [loading, setLoading] = useState(true);
+
+    const fetchData = useCallback(async () => {
+        setLoading(true);
+        const startDate = format(subMonths(currentMonth, 1), 'yyyy-MM-01');
+        const endDate = format(addMonths(currentMonth, 2), 'yyyy-MM-01');
+
+        const [dispRes, visitasRes] = await Promise.all([
+            supabase
+                .from('disponibilidad')
+                .select('*')
+                .gte('fecha', startDate)
+                .lt('fecha', endDate)
+                .order('fecha'),
+            supabase
+                .from('visitas')
+                .select('*')
+                .gte('fecha', startDate)
+                .lt('fecha', endDate)
+                .order('created_at', { ascending: false }),
+        ]);
+
+        if (dispRes.data) setDisponibilidad(dispRes.data);
+        if (visitasRes.data) setVisitas(visitasRes.data);
+        setLoading(false);
+    }, [currentMonth]);
+
+    useEffect(() => {
+        fetchData();
+    }, [fetchData]);
+
+    // Realtime subscriptions
+    useEffect(() => {
+        const dispChannel = supabase
+            .channel('disponibilidad-changes')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'disponibilidad' }, () => {
+                fetchData();
+            })
+            .subscribe();
+
+        const visitasChannel = supabase
+            .channel('visitas-changes')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'visitas' }, () => {
+                fetchData();
+            })
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(dispChannel);
+            supabase.removeChannel(visitasChannel);
+        };
+    }, [fetchData]);
+
+    const getTurnos = (date: string): TurnoStatus[] => {
+        const dayDisp = disponibilidad.filter((d) => d.fecha === date);
+        const dayVisitas = visitas.filter((v) => v.fecha === date && v.estado !== 'cancelada');
+
+        return dayDisp.map((d) => {
+            const reservas = dayVisitas
+                .filter((v) => v.idioma === d.idioma)
+                .reduce((sum, v) => sum + v.cantidad_huespedes, 0);
+
+            return {
+                id: d.id,
+                horario: d.horario,
+                idioma: d.idioma,
+                disponible: d.disponible,
+                bloqueada: d.bloqueada,
+                cupos_cerrados: d.cupos_cerrados,
+                capacidad_maxima: d.capacidad_maxima,
+                reservas_count: reservas,
+                cupos_disponibles: Math.max(0, d.capacidad_maxima - reservas),
+            };
+        });
+    };
+
+    const handleCreateReserva = async (data: { nombre: string; apellido: string; hotel: string; email: string; telefono: string; cantidad_huespedes: number; idioma: string; notas: string; fecha: string; horario: string }) => {
+        const { error } = await supabase.from('visitas').insert({
+            fecha: data.fecha,
+            horario: data.horario,
+            idioma: data.idioma,
+            nombre: data.nombre,
+            apellido: data.apellido,
+            hotel: data.hotel,
+            email: data.hotel === 'Externo' ? data.email : null,
+            telefono: data.hotel === 'Externo' ? data.telefono : null,
+            cantidad_huespedes: data.cantidad_huespedes,
+            notas: data.notas || null,
+            created_by: user?.id || null,
+            estado: 'pendiente',
+        });
+
+        if (error) throw error;
+        fetchData();
+    };
+
+    const turnos = selectedDate ? getTurnos(selectedDate) : [];
+
+    return (
+        <div className="min-h-screen" style={{ background: 'var(--color-bg)' }}>
+            <Navbar role="recepcion" />
+            <main className="lg:ml-[240px] pt-14 lg:pt-0 min-h-screen">
+                <div className="p-4 md:p-6 lg:p-8 max-w-7xl mx-auto">
+                    {/* Header */}
+                    <div className="mb-6">
+                        <h1 className="text-xl md:text-2xl font-bold" style={{ color: 'var(--color-text)' }}>
+                            Agenda de Reservas
+                        </h1>
+                        <p className="text-sm mt-1" style={{ color: 'var(--color-text-secondary)' }}>
+                            Huentala Wines Bodega Urbana — Panel de Recepción
+                        </p>
+                    </div>
+
+                    {loading ? (
+                        <div className="flex items-center justify-center py-20">
+                            <div className="w-8 h-8 border-3 border-[var(--color-primary)] border-t-transparent rounded-full animate-spin" />
+                        </div>
+                    ) : (
+                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                            {/* Calendar */}
+                            <div className="lg:col-span-2">
+                                <CalendarView
+                                    currentMonth={currentMonth}
+                                    selectedDate={selectedDate}
+                                    disponibilidad={disponibilidad}
+                                    visitas={visitas}
+                                    onSelectDate={setSelectedDate}
+                                    onPrevMonth={() => setCurrentMonth(subMonths(currentMonth, 1))}
+                                    onNextMonth={() => setCurrentMonth(addMonths(currentMonth, 1))}
+                                />
+
+                                {/* Reservas del día */}
+                                {selectedDate && (
+                                    <div className="mt-6">
+                                        <div
+                                            className="rounded-xl p-5 md:p-6"
+                                            style={{
+                                                background: 'var(--color-surface)',
+                                                border: '1px solid var(--color-border)',
+                                                boxShadow: 'var(--shadow-sm)',
+                                            }}
+                                        >
+                                            <h3 className="text-base font-semibold mb-4" style={{ color: 'var(--color-text)' }}>
+                                                Reservas del día
+                                            </h3>
+                                            <ReservationList
+                                                visitas={visitas}
+                                                selectedDate={selectedDate}
+                                            />
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Right sidebar */}
+                            <div className="space-y-6">
+                                {selectedDate ? (
+                                    <>
+                                        <DayDetailPanel
+                                            selectedDate={selectedDate}
+                                            turnos={turnos}
+                                        />
+                                        <ReservationForm
+                                            selectedDate={selectedDate}
+                                            turnos={turnos}
+                                            onSubmit={handleCreateReserva}
+                                        />
+                                    </>
+                                ) : (
+                                    <div
+                                        className="rounded-xl p-8 text-center"
+                                        style={{
+                                            background: 'var(--color-surface)',
+                                            border: '1px solid var(--color-border)',
+                                            boxShadow: 'var(--shadow-sm)',
+                                        }}
+                                    >
+                                        <svg className="w-16 h-16 mx-auto mb-4 opacity-20" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1}>
+                                            <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5" />
+                                        </svg>
+                                        <h4 className="text-sm font-semibold mb-1" style={{ color: 'var(--color-text)' }}>
+                                            Selecciona una fecha
+                                        </h4>
+                                        <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
+                                            Hacé click en un día del calendario para ver disponibilidad y crear reservas
+                                        </p>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    )}
+                </div>
+            </main>
+        </div>
+    );
+}
