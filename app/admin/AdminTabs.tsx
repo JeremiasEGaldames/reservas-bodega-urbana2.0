@@ -571,6 +571,7 @@ export function ConfigTab({ fetchData }: { fetchData: () => void }) {
     const [config, setConfig] = useState<Record<string, string>>({});
     const [configLoading, setConfigLoading] = useState(true);
     const [saving, setSaving] = useState(false);
+    const [showToast, setShowToast] = useState(false);
 
     useEffect(() => {
         const fetchConfig = async () => {
@@ -621,11 +622,12 @@ export function ConfigTab({ fetchData }: { fetchData: () => void }) {
                     .gte('fecha', todayStr);
             }
 
-            alert('Configuración guardada y aplicada a todos los turnos futuros (desde hoy).');
+            setShowToast(true);
+            setTimeout(() => setShowToast(false), 4000);
             if (fetchData) fetchData();
         } catch (err) {
             console.error('Error saving config:', err);
-            alert('Error al guardar la configuración');
+            // Podríamos implementar un toast de error aquí también si fuera necesario
         } finally {
             setSaving(false);
         }
@@ -634,7 +636,31 @@ export function ConfigTab({ fetchData }: { fetchData: () => void }) {
     if (configLoading) return <div className="flex justify-center py-10"><div className="w-6 h-6 border-2 border-[var(--color-primary)] border-t-transparent rounded-full animate-spin" /></div>;
 
     return (
-        <div className="space-y-6">
+        <div className="space-y-6 relative">
+            {/* Custom Toast Notification */}
+            {showToast && (
+                <div className="fixed top-20 right-6 z-[100] animate-fade-in-up">
+                    <div
+                        className="flex items-center gap-3 px-5 py-3.5 rounded-xl shadow-2xl border"
+                        style={{ background: 'var(--color-surface)', borderColor: 'var(--color-success)', color: 'var(--color-text)' }}
+                    >
+                        <div className="flex items-center justify-center w-8 h-8 rounded-full" style={{ background: 'var(--color-success-light)' }}>
+                            <svg className="w-5 h-5" style={{ color: 'var(--color-success)' }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
+                            </svg>
+                        </div>
+                        <div>
+                            <p className="font-bold text-sm">Configuración guardada</p>
+                            <p className="text-xs opacity-70">Los cambios se aplicaron a los turnos futuros.</p>
+                        </div>
+                        <button onClick={() => setShowToast(false)} className="ml-2 opacity-40 hover:opacity-100 transition-opacity">
+                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+            )}
             <h2 className="text-lg font-semibold" style={{ color: 'var(--color-text)' }}>Configuración del Sistema</h2>
             <div className="rounded-xl p-5 md:p-6" style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', boxShadow: 'var(--shadow-sm)' }}>
                 <div className="mb-6 p-4 rounded-xl" style={{ background: 'var(--color-bg)', border: '1px solid var(--color-border-light)' }}>
