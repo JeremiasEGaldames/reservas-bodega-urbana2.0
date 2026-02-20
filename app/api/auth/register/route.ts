@@ -6,16 +6,14 @@ export async function POST(request: Request) {
     try {
         const { email, password, nombre, rol } = await request.json();
 
-        if (!email || !password || !nombre || !rol) {
-            return NextResponse.json(
-                { error: 'Todos los campos son requeridos' },
-                { status: 400 }
-            );
-        }
+        if (!email) return NextResponse.json({ error: 'Email es requerido' }, { status: 400 });
+        if (!password) return NextResponse.json({ error: 'Contraseña es requerida' }, { status: 400 });
+        if (!nombre) return NextResponse.json({ error: 'Nombre es requerido' }, { status: 400 });
+        if (!rol) return NextResponse.json({ error: 'Rol es requerido' }, { status: 400 });
 
         if (!['recepcion', 'admin'].includes(rol)) {
             return NextResponse.json(
-                { error: 'Rol inválido' },
+                { error: `Rol inválido: ${rol}` },
                 { status: 400 }
             );
         }

@@ -612,16 +612,24 @@ export function UsuariosTab() {
     }, []);
 
     const createUser = async () => {
-        const res = await fetch('/api/auth/register', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(newUser),
-        });
-        if (res.ok) {
-            setShowCreate(false);
-            setNewUser({ email: '', password: '', nombre: '', rol: 'recepcion' });
-            const { data } = await supabase.from('usuarios').select('*').order('created_at');
-            if (data) setUsuarios(data);
+        try {
+            const res = await fetch('/api/auth/register', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(newUser),
+            });
+            const data = await res.json();
+            if (res.ok) {
+                setShowCreate(false);
+                setNewUser({ email: '', password: '', nombre: '', rol: 'recepcion' });
+                const { data: usersData } = await supabase.from('usuarios').select('*').order('created_at');
+                if (usersData) setUsuarios(usersData);
+            } else {
+                alert(`Error al crear usuario: ${data.error || 'Error desconocido'}`);
+            }
+        } catch (err) {
+            console.error('Error in createUser:', err);
+            alert('Error de red al intentar crear el usuario');
         }
     };
 
