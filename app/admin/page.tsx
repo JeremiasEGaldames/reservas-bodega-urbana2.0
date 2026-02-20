@@ -135,7 +135,7 @@ function AdminContent() {
                                 />
                             )}
                             {activeTab === 'analisis' && <AnalisisTab visitas={visitas} />}
-                            {activeTab === 'config' && <ConfigTab />}
+                            {activeTab === 'config' && <ConfigTab fetchData={fetchData} />}
                             {activeTab === 'usuarios' && <UsuariosTab />}
                         </>
                     )}

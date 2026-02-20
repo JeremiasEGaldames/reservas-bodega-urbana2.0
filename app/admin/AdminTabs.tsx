@@ -21,11 +21,22 @@ export const getTurnos = (date: string, disponibilidad: Disponibilidad[], visita
     const dayVisitas = visitas.filter((v) => v.fecha === date && v.estado !== 'cancelada');
     return dayDisp.map((d) => {
         const reservas = dayVisitas.filter((v) => v.idioma === d.idioma).reduce((sum, v) => sum + v.cantidad_huespedes, 0);
+
+        // Si el turno está bloqueado o con cupos cerrados, los disponibles son 0 a efectos de reserva
+        const cuposReales = (d.bloqueada || d.cupos_cerrados || !d.disponible)
+            ? 0
+            : Math.max(0, d.capacidad_maxima - reservas);
+
         return {
-            id: d.id, horario: d.horario, idioma: d.idioma, disponible: d.disponible,
-            bloqueada: d.bloqueada, cupos_cerrados: d.cupos_cerrados,
-            capacidad_maxima: d.capacidad_maxima, reservas_count: reservas,
-            cupos_disponibles: Math.max(0, d.capacidad_maxima - reservas),
+            id: d.id,
+            horario: d.horario,
+            idioma: d.idioma,
+            disponible: d.disponible,
+            bloqueada: d.bloqueada,
+            cupos_cerrados: d.cupos_cerrados,
+            capacidad_maxima: d.capacidad_maxima,
+            reservas_count: reservas,
+            cupos_disponibles: cuposReales,
         };
     });
 };
@@ -67,13 +78,26 @@ export function PanelTab({ visitas, disponibilidad }: { visitas: Visita[], dispo
                 <div className="rounded-xl p-5" style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', boxShadow: 'var(--shadow-sm)' }}>
                     <h3 className="text-base font-semibold mb-3" style={{ color: 'var(--color-text)' }}>Turnos Hoy</h3>
                     {todayTurnos.length > 0 ? todayTurnos.map((t) => (
-                        <div key={t.id} className="flex items-center justify-between p-3 rounded-lg mb-2" style={{ background: 'var(--color-bg)' }}>
-                            <span className="text-sm font-medium">
-                                {t.idioma === 'es' ? '🇪🇸' : '🇬🇧'} {t.horario?.slice(0, 5)} — {t.idioma === 'es' ? 'Español' : 'Inglés'}
-                            </span>
-                            <span className="text-sm font-bold" style={{ color: t.cupos_disponibles > 5 ? 'var(--color-success)' : 'var(--color-warning)' }}>
-                                {t.cupos_disponibles}/{t.capacidad_maxima}
-                            </span>
+                        <div key={t.id} className="flex items-center justify-between p-3 rounded-lg mb-2" style={{ background: 'var(--color-bg)', border: t.bloqueada || t.cupos_cerrados ? '1px dashed var(--color-danger-light)' : 'none' }}>
+                            <div className="flex flex-col">
+                                <span className="text-sm font-medium">
+                                    {t.idioma === 'es' ? '🇪🇸' : '🇬🇧'} {t.horario?.slice(0, 5)} — {t.idioma === 'es' ? 'Español' : 'Inglés'}
+                                </span>
+                                {(t.bloqueada || t.cupos_cerrados) && (
+                                    <span className="text-[10px] uppercase font-bold text-red-500">
+                                        {t.bloqueada ? 'Día Bloqueado' : 'Cupos Cerrados'}
+                                    </span>
+                                )}
+                            </div>
+                            <div className="text-right">
+                                <p className="text-sm font-bold" style={{ color: t.cupos_disponibles > 5 ? 'var(--color-success)' : 'var(--color-warning)' }}>
+                                    {t.cupos_disponibles}/{t.capacidad_maxima}
+                                    <span className="text-[10px] ml-1 opacity-60 font-normal">disponibles</span>
+                                </p>
+                                <p className="text-[10px]" style={{ color: 'var(--color-text-muted)' }}>
+                                    {t.reservas_count} reservas actuales
+                                </p>
+                            </div>
                         </div>
                     )) : <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>No hay turnos configurados para hoy</p>}
                 </div>
@@ -543,7 +567,7 @@ export function AnalisisTab({ visitas }: { visitas: Visita[] }) {
 }
 
 // --- Config Tab ---
-export function ConfigTab() {
+export function ConfigTab({ fetchData }: { fetchData: () => void }) {
     const [config, setConfig] = useState<Record<string, string>>({});
     const [configLoading, setConfigLoading] = useState(true);
     const [saving, setSaving] = useState(false);
@@ -563,10 +587,48 @@ export function ConfigTab() {
 
     const saveConfig = async () => {
         setSaving(true);
-        for (const [clave, valor] of Object.entries(config)) {
-            await supabase.from('configuracion').upsert({ clave, valor });
+        try {
+            // 1. Guardar en tabla configuracion
+            const entries = Object.entries(config);
+            for (const [clave, valor] of entries) {
+                await supabase.from('configuracion').upsert({ clave, valor });
+            }
+
+            // 2. Aplicar a todos los días futuros en disponibilidad
+            const todayStr = format(new Date(), 'yyyy-MM-dd');
+
+            // Actualizar ES
+            const updateES: any = {};
+            if (config.horario_es) updateES.horario = config.horario_es;
+            if (config.capacidad_default_es) updateES.capacidad_maxima = parseInt(config.capacidad_default_es);
+
+            if (Object.keys(updateES).length > 0) {
+                await supabase.from('disponibilidad')
+                    .update(updateES)
+                    .eq('idioma', 'es')
+                    .gte('fecha', todayStr);
+            }
+
+            // Actualizar EN
+            const updateEN: any = {};
+            if (config.horario_en) updateEN.horario = config.horario_en;
+            if (config.capacidad_default_en) updateEN.capacidad_maxima = parseInt(config.capacidad_default_en);
+
+            if (Object.keys(updateEN).length > 0) {
+                await supabase.from('disponibilidad')
+                    .update(updateEN)
+                    .eq('idioma', 'en')
+                    .gte('fecha', todayStr);
+            }
+
+            alert('Configuración guardada y aplicada a todos los turnos futuros (desde hoy).');
+            if (fetchData) fetchData();
+        } catch (err) {
+            console.error('Error saving config:', err);
+            alert('Error al guardar la configuración');
+        } finally {
+            setSaving(false);
         }
-        setSaving(false);
     };
 
     if (configLoading) return <div className="flex justify-center py-10"><div className="w-6 h-6 border-2 border-[var(--color-primary)] border-t-transparent rounded-full animate-spin" /></div>;
@@ -575,21 +637,52 @@ export function ConfigTab() {
         <div className="space-y-6">
             <h2 className="text-lg font-semibold" style={{ color: 'var(--color-text)' }}>Configuración del Sistema</h2>
             <div className="rounded-xl p-5 md:p-6" style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', boxShadow: 'var(--shadow-sm)' }}>
-                <div className="mb-4 p-3 rounded-lg" style={{ background: 'var(--color-bg)', border: '1px solid var(--color-border-light)' }}>
-                    <p className="text-sm font-semibold" style={{ color: 'var(--color-text)' }}>Huentala Wines Bodega Urbana</p>
-                    <p className="text-xs mt-0.5" style={{ color: 'var(--color-text-muted)' }}>El nombre de la bodega no es editable</p>
+                <div className="mb-6 p-4 rounded-xl" style={{ background: 'var(--color-bg)', border: '1px solid var(--color-border-light)' }}>
+                    <p className="text-sm font-semibold" style={{ color: 'var(--color-text)' }}>Gestión Maestra de Turnos</p>
+                    <p className="text-xs mt-1" style={{ color: 'var(--color-text-muted)' }}>Los cambios realizados aquí se aplicarán automáticamente a todos los días futuros en el calendario.</p>
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
-                        <label className="block text-sm font-medium mb-1.5" style={{ color: 'var(--color-text)' }}>Horario Español (HH:MM)</label>
-                        <input type="time" value={config.horario_es || '19:00'} onChange={(e) => setConfig({ ...config, horario_es: e.target.value })} className="w-full px-3 py-2.5 text-sm rounded-lg" style={{ border: '1px solid var(--color-border)', background: 'var(--color-bg)' }} />
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    {/* Español Section */}
+                    <div className="space-y-4">
+                        <h3 className="text-sm font-bold flex items-center gap-2" style={{ color: 'var(--color-primary)' }}>
+                            <span>🇪🇸</span> Turno Español
+                        </h3>
+                        <div className="space-y-3">
+                            <div>
+                                <label className="block text-xs font-medium mb-1" style={{ color: 'var(--color-text-muted)' }}>Horario (HH:MM)</label>
+                                <input type="time" value={config.horario_es || '19:00'} onChange={(e) => setConfig({ ...config, horario_es: e.target.value })} className="w-full px-3 py-2 text-sm rounded-lg" style={{ border: '1px solid var(--color-border)', background: 'var(--color-bg)' }} />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-medium mb-1" style={{ color: 'var(--color-text-muted)' }}>Capacidad (Cupos)</label>
+                                <input type="number" value={config.capacidad_default_es || '20'} onChange={(e) => setConfig({ ...config, capacidad_default_es: e.target.value })} className="w-full px-3 py-2 text-sm rounded-lg" style={{ border: '1px solid var(--color-border)', background: 'var(--color-bg)' }} />
+                            </div>
+                        </div>
                     </div>
-                    <div>
-                        <label className="block text-sm font-medium mb-1.5" style={{ color: 'var(--color-text)' }}>Horario Inglés (HH:MM)</label>
-                        <input type="time" value={config.horario_en || '19:30'} onChange={(e) => setConfig({ ...config, horario_en: e.target.value })} className="w-full px-3 py-2.5 text-sm rounded-lg" style={{ border: '1px solid var(--color-border)', background: 'var(--color-bg)' }} />
+
+                    {/* Inglés Section */}
+                    <div className="space-y-4">
+                        <h3 className="text-sm font-bold flex items-center gap-2" style={{ color: 'var(--color-primary)' }}>
+                            <span>🇬🇧</span> Turno Inglés
+                        </h3>
+                        <div className="space-y-3">
+                            <div>
+                                <label className="block text-xs font-medium mb-1" style={{ color: 'var(--color-text-muted)' }}>Horario (HH:MM)</label>
+                                <input type="time" value={config.horario_en || '19:30'} onChange={(e) => setConfig({ ...config, horario_en: e.target.value })} className="w-full px-3 py-2 text-sm rounded-lg" style={{ border: '1px solid var(--color-border)', background: 'var(--color-bg)' }} />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-medium mb-1" style={{ color: 'var(--color-text-muted)' }}>Capacidad (Cupos)</label>
+                                <input type="number" value={config.capacidad_default_en || '20'} onChange={(e) => setConfig({ ...config, capacidad_default_en: e.target.value })} className="w-full px-3 py-2 text-sm rounded-lg" style={{ border: '1px solid var(--color-border)', background: 'var(--color-bg)' }} />
+                            </div>
+                        </div>
                     </div>
                 </div>
-                <button onClick={saveConfig} disabled={saving} className="mt-4 px-6 py-2.5 text-sm font-semibold text-white rounded-lg cursor-pointer disabled:opacity-60" style={{ background: 'var(--color-primary)' }}>{saving ? 'Guardando...' : 'Guardar configuración'}</button>
+
+                <div className="mt-8 pt-6 border-t" style={{ borderColor: 'var(--color-border-light)' }}>
+                    <button onClick={saveConfig} disabled={saving} className="px-6 py-2.5 text-sm font-semibold text-white rounded-lg cursor-pointer disabled:opacity-60 transition-all hover:scale-[1.02] active:scale-[0.98]" style={{ background: 'var(--color-primary)' }}>
+                        {saving ? 'Aplicando cambios...' : 'Guardar y Actualizar Todo'}
+                    </button>
+                </div>
             </div>
         </div>
     );
