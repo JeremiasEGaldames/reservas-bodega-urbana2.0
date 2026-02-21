@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { supabase } from '@/lib/supabase';
 import type { ReservaFormData, HotelType, IdiomaType, TurnoStatus } from '@/lib/types';
 
 interface ReservationFormProps {
@@ -56,21 +57,71 @@ export default function ReservationForm({
         setError(null);
 
         try {
-            // VALIDACIÓN EN SERVIDOR antes de insertar
-            const validacion = await fetch('/api/reservas/validar', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    fecha: selectedDate,
-                    idioma: form.idioma,
-                    reservaId: initialData && isEditing ? (initialData as any).id : null,
-                }),
-            });
+            // VALIDACIÓN DIRECTA — antes del insert
+            const { data: turno, error: errorTurno } =
+                await supabase
+                    .from('disponibilidad')
+                    .select('*')
+                    .eq('fecha', selectedDate)
+                    .eq('idioma', form.idioma)
+                    .single();
 
-            const resultado = await validacion.json();
+            if (errorTurno || !turno) {
+                setError('Este turno no está disponible.');
+                setLoading(false);
+                return;
+            }
 
-            if (!resultado.permitido) {
-                setError(resultado.motivo || 'No es posible realizar esta reserva.');
+            if (turno.bloqueada) {
+                setError(
+                    turno.motivo_bloqueo
+                    || 'Este día está bloqueado.'
+                );
+                setLoading(false);
+                return;
+            }
+
+            if (turno.cupos_cerrados) {
+                setError('Los cupos de este turno están cerrados.');
+                setLoading(false);
+                return;
+            }
+
+            if (!turno.disponible) {
+                setError('Este turno no está disponible.');
+                setLoading(false);
+                return;
+            }
+
+            // Contar huéspedes activos del turno
+            let queryReservas = supabase
+                .from('visitas')
+                .select('cantidad_huespedes')
+                .eq('fecha', selectedDate)
+                .eq('idioma', form.idioma)
+                .neq('estado', 'cancelada');
+
+            // Si es edición excluir la reserva actual
+            const reservaId = initialData && isEditing ? (initialData as any).id : null;
+            if (reservaId) {
+                queryReservas = queryReservas
+                    .neq('id', reservaId);
+            }
+
+            const { data: reservasActivas } =
+                await queryReservas;
+
+            const huespedesTotales = (reservasActivas || [])
+                .reduce(
+                    (acc, r) =>
+                        acc + (r.cantidad_huespedes || 0), 0
+                );
+
+            const cuposRestantes =
+                turno.capacidad_maxima - huespedesTotales;
+
+            if (cuposRestantes <= 0) {
+                setError('No quedan cupos disponibles.');
                 setLoading(false);
                 return;
             }
