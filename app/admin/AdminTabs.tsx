@@ -264,7 +264,7 @@ export function CalendarioTab({ currentMonth, setCurrentMonth, selectedDate, set
             console.error('Error updating capacity:', error);
             alert(`Error al actualizar capacidad: ${error.message}`);
         } else {
-            await emitirSyncSignal('disponibilidad');
+            await emitirSyncSignal('mod_disponibilidad');
         }
         fetchData();
     };
@@ -277,7 +277,7 @@ export function CalendarioTab({ currentMonth, setCurrentMonth, selectedDate, set
             console.error('Error updating horario:', error);
             alert(`Error al actualizar horario: ${error.message}`);
         } else {
-            await emitirSyncSignal('disponibilidad');
+            await emitirSyncSignal('mod_disponibilidad');
         }
         fetchData();
     };
@@ -288,7 +288,7 @@ export function CalendarioTab({ currentMonth, setCurrentMonth, selectedDate, set
             console.error('Error toggling quotas:', error);
             alert(`Error al cambiar estado de cupos: ${error.message}`);
         } else {
-            await emitirSyncSignal('cierre_cupos');
+            await emitirSyncSignal(closed ? 'cierre_cupos' : 'apertura_cupos');
         }
         fetchData();
     };
@@ -301,7 +301,7 @@ export function CalendarioTab({ currentMonth, setCurrentMonth, selectedDate, set
             alert(`Error al bloquear el día: ${error.message}`);
             return;
         }
-        await emitirSyncSignal('bloqueo');
+        await emitirSyncSignal('bloqueo_dia');
         setBlockModal({ open: false, fecha: '', motivo: '' });
         fetchData();
     };
@@ -312,7 +312,7 @@ export function CalendarioTab({ currentMonth, setCurrentMonth, selectedDate, set
             console.error('Error unblocking day:', error);
             alert(`Error al desbloquear el día: ${error.message}`);
         } else {
-            await emitirSyncSignal('desbloqueo');
+            await emitirSyncSignal('desbloqueo_dia');
         }
         fetchData();
     };
@@ -331,7 +331,7 @@ export function CalendarioTab({ currentMonth, setCurrentMonth, selectedDate, set
         if (inserts.length > 0) {
             const { error } = await supabase.from('disponibilidad').insert(inserts);
             if (!error) {
-                await emitirSyncSignal('disponibilidad');
+                await emitirSyncSignal('mod_disponibilidad');
             }
         }
         setBulkLoading(false);
@@ -691,6 +691,7 @@ export function ConfigTab({ fetchData }: { fetchData: () => void }) {
             setShowToast(true);
             setTimeout(() => setShowToast(false), 4000);
             if (fetchData) fetchData();
+            await emitirSyncSignal('mod_disponibilidad');
         } catch (err) {
             console.error('Error saving config:', err);
             // Podríamos implementar un toast de error aquí también si fuera necesario
