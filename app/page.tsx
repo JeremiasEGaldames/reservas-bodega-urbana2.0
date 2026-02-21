@@ -1,31 +1,414 @@
 'use client';
 
-import { useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { addMonths, subMonths, format } from 'date-fns';
+import ProtectedRoute from '@/components/ProtectedRoute';
+import Navbar from '@/components/Navbar';
+import CalendarView from '@/components/CalendarView';
+import DayDetailPanel from '@/components/DayDetailPanel';
+import ReservationForm from '@/components/ReservationForm';
+import ReservationList from '@/components/ReservationList';
+import ConfirmModal from '@/components/ConfirmModal';
+import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth';
+import { emitirSyncSignal } from '@/lib/syncSignal';
+import type { Disponibilidad, Visita, TurnoStatus, ReservaFormData } from '@/lib/types';
 
-export default function Home() {
-  const { user, loading } = useAuth();
-  const router = useRouter();
+export default function ReservasPage() {
+    return (
+        <ProtectedRoute allowedRoles={['recepcion', 'admin']}>
+            <ReservasContent />
+        </ProtectedRoute>
+    );
+}
 
-  useEffect(() => {
-    if (!loading) {
-      if (!user) {
-        router.replace('/login');
-      } else if (user.rol === 'admin') {
-        router.replace('/admin');
-      } else {
-        router.replace('/reservas');
-      }
-    }
-  }, [user, loading, router]);
+function ReservasContent() {
+    const { user } = useAuth();
+    const [currentMonth, setCurrentMonth] = useState(new Date());
+    const [selectedDate, setSelectedDate] = useState<string | null>(null);
+    const [disponibilidad, setDisponibilidad] = useState<Disponibilidad[]>([]);
+    const [visitas, setVisitas] = useState<Visita[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [editingVisita, setEditingVisita] = useState<Visita | null>(null);
+    const [mostrarForm, setMostrarForm] = useState(false);
+    const [horaSync, setHoraSync] = useState<string>('');
+    const formularioAbierto = useRef(false);
+    const pendienteActualizacion = useRef(false);
+    const ultimaActualizacion = useRef<Date>(new Date());
 
-  return (
-    <div className="min-h-screen flex items-center justify-center" style={{ background: 'var(--color-bg)' }}>
-      <div className="flex flex-col items-center gap-3">
-        <div className="w-10 h-10 border-3 border-[var(--color-primary)] border-t-transparent rounded-full animate-spin" />
-        <p className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>Cargando...</p>
-      </div>
-    </div>
-  );
+    const [confirmModal, setConfirmModal] = useState<{
+        open: boolean;
+        title: string;
+        message: string;
+        onConfirm: () => void;
+    }>({ open: false, title: '', message: '', onConfirm: () => { } });
+
+    const fetchData = useCallback(async () => {
+        setLoading(true);
+        const startDate = format(subMonths(currentMonth, 1), 'yyyy-MM-01');
+        const endDate = format(addMonths(currentMonth, 2), 'yyyy-MM-01');
+
+        const [dispRes, visitasRes] = await Promise.all([
+            supabase.rpc('get_disponibilidad', {
+                p_fecha_inicio: startDate,
+                p_fecha_fin: endDate
+            }),
+            supabase
+                .from('visitas')
+                .select('*')
+                .gte('fecha', startDate)
+                .lt('fecha', endDate)
+                .order('created_at', { ascending: false }),
+        ]);
+
+        if (dispRes.data) setDisponibilidad(dispRes.data);
+        if (visitasRes.data) setVisitas(visitasRes.data);
+        setLoading(false);
+    }, [currentMonth]);
+
+    // Ref para tener siempre la versión más reciente de fetchData sin generar dependencias
+    const fetchDataRef = useRef(fetchData);
+    useEffect(() => {
+        fetchDataRef.current = fetchData;
+    }, [fetchData]);
+
+    // useCallback estable (sin dependencias) para evitar stale closures en setInterval y event listeners
+    const sincronizar = useCallback(() => {
+        if (formularioAbierto.current) {
+            pendienteActualizacion.current = true;
+            return;
+        }
+        ultimaActualizacion.current = new Date();
+        fetchDataRef.current();
+        setHoraSync(new Date().toLocaleTimeString('es-AR'));
+        pendienteActualizacion.current = false;
+    }, []);
+
+    // Ref para tener siempre la versión actual de sincronizar dentro de effectos
+    const sincronizarRef = useRef(sincronizar);
+    useEffect(() => {
+        sincronizarRef.current = sincronizar;
+    }, [sincronizar]);
+
+    useEffect(() => {
+        fetchData();
+        setHoraSync(new Date().toLocaleTimeString('es-AR'));
+    }, [fetchData]);
+
+    // Suscripción Realtime a sync_signal: reacciona instantáneamente ante cambios del admin
+    useEffect(() => {
+        const motivosCriticos = ['bloqueo_dia', 'desbloqueo_dia', 'cierre_cupos', 'apertura_cupos', 'mod_disponibilidad'];
+
+        const channel = supabase
+            .channel('sync_signal_changes')
+            .on(
+                'postgres_changes',
+                { event: 'UPDATE', schema: 'public', table: 'sync_signal' },
+                (payload) => {
+                    const motivo = payload.new?.motivo as string;
+                    if (motivosCriticos.includes(motivo)) {
+                        window.location.reload();
+                    } else {
+                        sincronizarRef.current();
+                    }
+                }
+            )
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(channel);
+        };
+    }, []);
+
+    // visibilitychange: refresca datos al volver a la pestaña
+    useEffect(() => {
+        function handleVisibility() {
+            if (document.visibilityState === 'visible') {
+                sincronizarRef.current();
+            }
+        }
+        document.addEventListener('visibilitychange', handleVisibility);
+        return () => document.removeEventListener('visibilitychange', handleVisibility);
+    }, []);
+
+    const getTurnos = (date: string): TurnoStatus[] => {
+        const dayDisp = disponibilidad.filter((d) => d.fecha === date);
+        const dayVisitas = visitas.filter((v) => v.fecha === date && v.estado !== 'cancelada');
+
+        return dayDisp.map((d) => {
+            const reservas = dayVisitas
+                .filter((v) => v.idioma === d.idioma && v.id !== editingVisita?.id) // Excluir la propia reserva al editar para no contar doble si se mantiene el turno
+                .reduce((sum, v) => sum + v.cantidad_huespedes, 0);
+
+            return {
+                id: d.id,
+                horario: d.horario,
+                idioma: d.idioma,
+                disponible: d.disponible,
+                bloqueada: d.bloqueada,
+                cupos_cerrados: d.cupos_cerrados,
+                capacidad_maxima: d.capacidad_maxima,
+                reservas_count: reservas,
+                cupos_disponibles: Math.max(0, d.capacidad_maxima - reservas),
+                motivo_bloqueo: d.motivo_bloqueo,
+            };
+        }).sort((a, b) => a.horario.localeCompare(b.horario));
+    };
+
+    // Helper para labels de idioma
+    const getIdiomaLabel = (idioma: string) => {
+        if (idioma === 'pt') return '🇧🇷 Português';
+        if (idioma === 'es') return '🇦🇷 Español';
+        return '🇬🇧 English';
+    };
+
+    const handleCreateReserva = async (data: ReservaFormData & { fecha: string; horario: string }) => {
+        const { error } = await supabase.from('visitas').insert({
+            fecha: data.fecha,
+            horario: data.horario,
+            idioma: data.idioma,
+            nombre: data.nombre,
+            apellido: data.apellido,
+            hotel: data.hotel,
+            email: data.hotel === 'Externo' ? data.email : null,
+            telefono: data.hotel === 'Externo' ? data.telefono : null,
+            cantidad_huespedes: data.cantidad_huespedes,
+            notas: data.notas || null,
+            created_by: user?.id || null,
+            estado: 'confirmada',
+        });
+
+        if (error) throw error;
+        await emitirSyncSignal('nueva_reserva');
+        setMostrarForm(false);
+        formularioAbierto.current = false;
+        pendienteActualizacion.current = false;
+        fetchData();
+        setHoraSync(new Date().toLocaleTimeString('es-AR'));
+    };
+
+    const handleUpdateReserva = async (data: ReservaFormData & { fecha: string; horario: string }) => {
+        if (!editingVisita) return;
+
+        const { error } = await supabase.from('visitas').update({
+            // fecha: data.fecha, // Por ahora mantenemos la fecha original, o podríamos permitir cambiarla
+            horario: data.horario,
+            idioma: data.idioma,
+            nombre: data.nombre,
+            apellido: data.apellido,
+            hotel: data.hotel,
+            email: data.hotel === 'Externo' ? data.email : null,
+            telefono: data.hotel === 'Externo' ? data.telefono : null,
+            cantidad_huespedes: data.cantidad_huespedes,
+            notas: data.notas || null,
+            updated_at: new Date().toISOString()
+        }).eq('id', editingVisita.id);
+
+        if (error) throw error;
+        await emitirSyncSignal('editar_reserva');
+        setEditingVisita(null);
+        setMostrarForm(false);
+        formularioAbierto.current = false;
+        pendienteActualizacion.current = false;
+        fetchData();
+        setHoraSync(new Date().toLocaleTimeString('es-AR'));
+    };
+
+    const handleDelete = (id: string) => {
+        setConfirmModal({
+            open: true,
+            title: 'Eliminar reserva',
+            message: '¿Estás seguro de que querés eliminar esta reserva? Esta acción liberará los cupos inmediatamente.',
+            onConfirm: async () => {
+                const { error } = await supabase.from('visitas').delete().eq('id', id);
+                if (error) {
+                    console.error('Error al eliminar:', error);
+                    alert(`Error al eliminar la reserva: ${error.message}`);
+                    return;
+                }
+                setConfirmModal((prev) => ({ ...prev, open: false }));
+                if (editingVisita?.id === id) setEditingVisita(null);
+                await emitirSyncSignal('eliminar_reserva');
+                fetchData();
+            },
+        });
+    };
+
+    const handleChangeStatus = async (id: string, estado: Visita['estado']) => {
+        await supabase.from('visitas').update({
+            estado,
+            updated_at: new Date().toISOString()
+        }).eq('id', id);
+        await emitirSyncSignal('editar_reserva');
+        fetchData();
+    };
+
+    const turnos = selectedDate ? getTurnos(selectedDate) : [];
+
+    const initialFormData: Partial<ReservaFormData & { id: string }> | undefined = editingVisita ? {
+        id: editingVisita.id,
+        nombre: editingVisita.nombre,
+        apellido: editingVisita.apellido,
+        hotel: editingVisita.hotel,
+        email: editingVisita.email || '',
+        telefono: editingVisita.telefono || '',
+        cantidad_huespedes: editingVisita.cantidad_huespedes,
+        idioma: editingVisita.idioma,
+        notas: editingVisita.notas || '',
+    } : undefined;
+
+    return (
+        <div className="min-h-screen" style={{ background: 'var(--color-bg)' }}>
+            <Navbar role="recepcion" />
+            <main className="lg:ml-[240px] pt-14 lg:pt-0 min-h-screen">
+                <div className="p-4 md:p-6 lg:p-8 max-w-7xl mx-auto">
+                    {/* Header */}
+                    <div className="flex flex-wrap items-center justify-between gap-4">
+                        <div>
+                            <h1 className="text-xl md:text-2xl font-bold" style={{ color: 'var(--color-text)' }}>
+                                Agenda de Reservas
+                            </h1>
+                            <p className="text-sm mt-1" style={{ color: 'var(--color-text-secondary)' }}>
+                                Huentala Wines Bodega Urbana — Panel de Recepción
+                            </p>
+                        </div>
+                        <div className="flex items-center gap-3">
+                            <div className="text-xs font-medium px-3 py-1.5 rounded-full border bg-white/50 backdrop-blur-sm" style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-secondary)' }}>
+                                <span className="inline-block w-2 h-2 rounded-full bg-green-500 mr-2 animate-pulse"></span>
+                                Actualizado: {horaSync || '--:--:--'}
+                            </div>
+                            <button
+                                onClick={() => sincronizar()}
+                                className="p-1.5 rounded-lg border bg-white hover:bg-gray-50 transition-colors"
+                                style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-secondary)' }}
+                                title="Actualizar ahora"
+                            >
+                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+
+                    {loading ? (
+                        <div className="flex items-center justify-center py-20">
+                            <div className="w-8 h-8 border-3 border-[var(--color-primary)] border-t-transparent rounded-full animate-spin" />
+                        </div>
+                    ) : (
+                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                            {/* Calendar */}
+                            <div className="lg:col-span-2">
+                                <CalendarView
+                                    currentMonth={currentMonth}
+                                    selectedDate={selectedDate}
+                                    disponibilidad={disponibilidad}
+                                    visitas={visitas}
+                                    onSelectDate={(date) => {
+                                        setSelectedDate(date);
+                                        setEditingVisita(null); // Reset admin mode on date change
+                                        setMostrarForm(true);
+                                        formularioAbierto.current = true;
+                                    }}
+                                    onPrevMonth={() => setCurrentMonth(subMonths(currentMonth, 1))}
+                                    onNextMonth={() => setCurrentMonth(addMonths(currentMonth, 1))}
+                                />
+
+                                {/* Reservas del día */}
+                                {selectedDate && (
+                                    <div className="mt-6">
+                                        <div
+                                            className="rounded-xl p-5 md:p-6"
+                                            style={{
+                                                background: 'var(--color-surface)',
+                                                border: '1px solid var(--color-border)',
+                                                boxShadow: 'var(--shadow-sm)',
+                                            }}
+                                        >
+                                            <h3 className="text-base font-semibold mb-4" style={{ color: 'var(--color-text)' }}>
+                                                Reservas del día
+                                            </h3>
+                                            <ReservationList
+                                                visitas={visitas}
+                                                selectedDate={selectedDate}
+                                                showActions={true}
+                                                onDelete={handleDelete}
+                                                onEdit={(v) => {
+                                                    setEditingVisita(v);
+                                                    setMostrarForm(true);
+                                                    formularioAbierto.current = true;
+                                                }}
+                                                onChangeStatus={handleChangeStatus}
+                                            />
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Right sidebar */}
+                            <div className="space-y-6">
+                                {selectedDate && mostrarForm ? (
+                                    <>
+                                        <DayDetailPanel
+                                            selectedDate={selectedDate}
+                                            turnos={turnos}
+                                            onClose={() => {
+                                                setMostrarForm(false);
+                                                formularioAbierto.current = false;
+                                                if (pendienteActualizacion.current) {
+                                                    sincronizar();
+                                                }
+                                            }}
+                                        />
+                                        <ReservationForm
+                                            key={editingVisita ? `edit-${editingVisita.id}` : 'new'} // Force re-render on mode change
+                                            selectedDate={selectedDate}
+                                            turnos={turnos}
+                                            initialData={initialFormData}
+                                            isEditing={!!editingVisita}
+                                            onSubmit={editingVisita ? handleUpdateReserva : handleCreateReserva}
+                                            onCancel={() => {
+                                                setEditingVisita(null);
+                                                setMostrarForm(false);
+                                                formularioAbierto.current = false;
+                                                if (pendienteActualizacion.current) {
+                                                    sincronizar();
+                                                }
+                                            }}
+                                        />
+                                    </>
+                                ) : (
+                                    <div
+                                        className="rounded-xl p-8 text-center"
+                                        style={{
+                                            background: 'var(--color-surface)',
+                                            border: '1px solid var(--color-border)',
+                                            boxShadow: 'var(--shadow-sm)',
+                                        }}
+                                    >
+                                        <svg className="w-16 h-16 mx-auto mb-4 opacity-20" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1}>
+                                            <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5" />
+                                        </svg>
+                                        <h4 className="text-sm font-semibold mb-1" style={{ color: 'var(--color-text)' }}>
+                                            Selecciona una fecha
+                                        </h4>
+                                        <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
+                                            Hacé click en un día del calendario para ver disponibilidad y crear reservas
+                                        </p>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    )}
+                </div>
+            </main>
+
+            <ConfirmModal
+                open={confirmModal.open}
+                title={confirmModal.title}
+                message={confirmModal.message}
+                onConfirm={confirmModal.onConfirm}
+                onCancel={() => setConfirmModal({ ...confirmModal, open: false })}
+            />
+        </div>
+    );
 }
