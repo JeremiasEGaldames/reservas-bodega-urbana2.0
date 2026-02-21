@@ -7,6 +7,7 @@ export type IdiomaType = 'es' | 'en' | 'pt';
 export type HotelType = 'Sheraton' | 'Huentala' | 'Hualta' | 'Externo';
 export type EstadoReserva = 'pendiente' | 'confirmada' | 'cancelada';
 
+// Sincronización final: 2026-02-21 07:50
 export interface Usuario {
     id: string;
     email: string;
