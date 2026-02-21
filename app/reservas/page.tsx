@@ -67,16 +67,29 @@ function ReservasContent() {
         setLoading(false);
     }, [currentMonth]);
 
-    function sincronizar() {
-        if (formularioAbierto.current) {
+    // Ref para tener siempre la versión más reciente de fetchData sin generar dependencias
+    const fetchDataRef = useRef(fetchData);
+    useEffect(() => {
+        fetchDataRef.current = fetchData;
+    }, [fetchData]);
+
+    // useCallback estable (sin dependencias) para evitar stale closures en setInterval y event listeners
+    const sincronizar = useCallback((forzar = false) => {
+        if (!forzar && formularioAbierto.current) {
             pendienteActualizacion.current = true;
             return;
         }
         ultimaActualizacion.current = new Date();
-        fetchData();
+        fetchDataRef.current();
         setHoraSync(new Date().toLocaleTimeString('es-AR'));
         pendienteActualizacion.current = false;
-    }
+    }, []);
+
+    // Ref para tener siempre la versión actual de sincronizar dentro de effectos
+    const sincronizarRef = useRef(sincronizar);
+    useEffect(() => {
+        sincronizarRef.current = sincronizar;
+    }, [sincronizar]);
 
     useEffect(() => {
         fetchData();
@@ -100,6 +113,7 @@ function ReservasContent() {
 
     // PASO 3: useEffect 2 — polling del signal cada 5 segundos
     useEffect(() => {
+        const motivosCriticos = ['bloqueo_dia', 'desbloqueo_dia', 'cierre_cupos', 'apertura_cupos', 'mod_disponibilidad'];
         const intervalo = setInterval(async () => {
             const { data } = await supabase
                 .from('sync_signal')
@@ -111,23 +125,24 @@ function ReservasContent() {
 
             if (data.updated_at !== ultimoSignal.current && ultimoSignal.current !== '') {
                 ultimoSignal.current = data.updated_at;
-                sincronizar();
+                const esCritico = motivosCriticos.includes(data.motivo);
+                sincronizarRef.current(esCritico);
             }
         }, 5000);
 
         return () => clearInterval(intervalo);
-    }, [selectedDate]); // Se mantiene dependencia para estabilidad, re-evaluación opcional
+    }, []); // Sin dependencias: el intervalo se crea una sola vez y usa siempre la ref actualizada
 
     // PASO 3: useEffect 3 — visibilitychange
     useEffect(() => {
         function handleVisibility() {
             if (document.visibilityState === 'visible') {
-                sincronizar();
+                sincronizarRef.current();
             }
         }
         document.addEventListener('visibilitychange', handleVisibility);
         return () => document.removeEventListener('visibilitychange', handleVisibility);
-    }, [selectedDate]);
+    }, []); // Sin dependencias: usa siempre la ref actualizada
 
     const getTurnos = (date: string): TurnoStatus[] => {
         const dayDisp = disponibilidad.filter((d) => d.fecha === date);
