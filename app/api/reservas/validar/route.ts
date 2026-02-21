@@ -1,9 +1,21 @@
-import { createAdminClient } from '@/lib/supabase-server';
 import { NextRequest, NextResponse } from 'next/server';
+import { createClient } from '@supabase/supabase-js';
 
 export async function POST(req: NextRequest) {
     try {
-        const { fecha, idioma, reservaId } = await req.json();
+        const supabase = createClient(
+            process.env.NEXT_PUBLIC_SUPABASE_URL!,
+            process.env.SUPABASE_SERVICE_ROLE_KEY!,
+            {
+                auth: {
+                    autoRefreshToken: false,
+                    persistSession: false
+                }
+            }
+        );
+
+        const body = await req.json();
+        const { fecha, idioma, reservaId } = body;
 
         if (!fecha || !idioma) {
             return NextResponse.json(
@@ -15,17 +27,15 @@ export async function POST(req: NextRequest) {
             );
         }
 
-        const supabase = createAdminClient();
+        const { data: turno, error: errorTurno } =
+            await supabase
+                .from('disponibilidad')
+                .select('*')
+                .eq('fecha', fecha)
+                .eq('idioma', idioma)
+                .single();
 
-        // Buscar el turno exacto en disponibilidad
-        const { data: turno, error } = await supabase
-            .from('disponibilidad')
-            .select('*')
-            .eq('fecha', fecha)
-            .eq('idioma', idioma)
-            .single();
-
-        if (error || !turno) {
+        if (errorTurno || !turno) {
             return NextResponse.json(
                 {
                     permitido: false,
@@ -35,7 +45,6 @@ export async function POST(req: NextRequest) {
             );
         }
 
-        // Verificar si está bloqueado
         if (turno.bloqueada) {
             return NextResponse.json({
                 permitido: false,
@@ -44,15 +53,13 @@ export async function POST(req: NextRequest) {
             });
         }
 
-        // Verificar si los cupos están cerrados
         if (turno.cupos_cerrados) {
             return NextResponse.json({
                 permitido: false,
-                motivo: 'Los cupos para este turno están cerrados.'
+                motivo: 'Los cupos están cerrados.'
             });
         }
 
-        // Verificar si está marcado como no disponible
         if (!turno.disponible) {
             return NextResponse.json({
                 permitido: false,
@@ -60,7 +67,6 @@ export async function POST(req: NextRequest) {
             });
         }
 
-        // Contar reservas activas para ese turno
         let query = supabase
             .from('visitas')
             .select('cantidad_huespedes')
@@ -72,9 +78,12 @@ export async function POST(req: NextRequest) {
             query = query.neq('id', reservaId);
         }
 
-        const { data: reservasActivas, error: errorCount } = await query;
+        const {
+            data: reservasActivas,
+            error: errorReservas
+        } = await query;
 
-        if (errorCount) {
+        if (errorReservas) {
             return NextResponse.json(
                 {
                     permitido: false,
@@ -84,9 +93,11 @@ export async function POST(req: NextRequest) {
             );
         }
 
-        // Sumar huéspedes ya reservados
         const huespedesTotales = (reservasActivas || [])
-            .reduce((acc, r) => acc + (r.cantidad_huespedes || 0), 0);
+            .reduce(
+                (acc, r) => acc + (r.cantidad_huespedes || 0),
+                0
+            );
 
         const cuposRestantes =
             turno.capacidad_maxima - huespedesTotales;
@@ -94,21 +105,21 @@ export async function POST(req: NextRequest) {
         if (cuposRestantes <= 0) {
             return NextResponse.json({
                 permitido: false,
-                motivo: 'No quedan cupos disponibles para este turno.'
+                motivo: 'No quedan cupos disponibles.'
             });
         }
 
-        // Todo OK — permitir la reserva
         return NextResponse.json({
             permitido: true,
             cuposRestantes
         });
 
-    } catch (e) {
+    } catch (error) {
+        console.error('Error en validar reserva:', error);
         return NextResponse.json(
             {
                 permitido: false,
-                motivo: 'Error interno del servidor.'
+                motivo: 'Error interno. Intentá nuevamente.'
             },
             { status: 500 }
         );
