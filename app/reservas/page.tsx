@@ -67,7 +67,6 @@ function ReservasContent() {
     }, [currentMonth]);
 
     function sincronizar() {
-        // No interrumpir si formulario está abierto
         if (formularioAbierto.current) {
             pendienteActualizacion.current = true;
             return;
@@ -83,8 +82,22 @@ function ReservasContent() {
         setHoraSync(new Date().toLocaleTimeString('es-AR'));
     }, [fetchData]);
 
-    // Polling del signal — cada 5 segundos
-    // Consulta ultra liviana a una sola fila
+    // PASO 3: useEffect 1 — inicializar el signal
+    useEffect(() => {
+        async function inicializarSignal() {
+            const { data } = await supabase
+                .from('sync_signal')
+                .select('updated_at')
+                .eq('id', 1)
+                .single();
+            if (data) {
+                ultimoSignal.current = data.updated_at;
+            }
+        }
+        inicializarSignal();
+    }, []);
+
+    // PASO 3: useEffect 2 — polling del signal cada 5 segundos
     useEffect(() => {
         const intervalo = setInterval(async () => {
             const { data } = await supabase
@@ -95,39 +108,16 @@ function ReservasContent() {
 
             if (!data) return;
 
-            // Solo recargar si el timestamp cambió
-            const nuevoSignal = data.updated_at;
-            if (nuevoSignal !== ultimoSignal.current) {
-                const esPrimeraCarga = ultimoSignal.current === '';
-                ultimoSignal.current = nuevoSignal;
-
-                // No recargar en la primera carga (ya se hace al montar)
-                if (!esPrimeraCarga) {
-                    sincronizar();
-                }
+            if (data.updated_at !== ultimoSignal.current && ultimoSignal.current !== '') {
+                ultimoSignal.current = data.updated_at;
+                sincronizar();
             }
         }, 5000);
 
         return () => clearInterval(intervalo);
-    }, [selectedDate]);
+    }, [selectedDate]); // Se mantiene dependencia para estabilidad, re-evaluación opcional
 
-    // Inicializar el signal al montar
-    useEffect(() => {
-        async function inicializarSignal() {
-            const { data } = await supabase
-                .from('sync_signal')
-                .select('updated_at')
-                .eq('id', 1)
-                .single();
-
-            if (data) {
-                ultimoSignal.current = data.updated_at;
-            }
-        }
-        inicializarSignal();
-    }, []);
-
-    // Visibilitychange — al volver a la pestaña (Capa de seguridad extra)
+    // PASO 3: useEffect 3 — visibilitychange
     useEffect(() => {
         function handleVisibility() {
             if (document.visibilityState === 'visible') {
