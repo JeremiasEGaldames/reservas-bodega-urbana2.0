@@ -14,6 +14,7 @@ import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
     PieChart, Pie, Cell, Legend
 } from 'recharts';
+import { emitirSyncSignal } from '@/lib/syncSignal';
 
 // Helper function reused across tabs
 export const getTurnos = (date: string, disponibilidad: Disponibilidad[], visitas: Visita[]): TurnoStatus[] => {
@@ -147,6 +148,7 @@ export function ReservasTab({ visitas, disponibilidad, fetchData, user, selected
             created_by: user?.id || null, estado: 'confirmada',
         });
         if (error) throw error;
+        await emitirSyncSignal('nueva_reserva');
         setShowNewReserva(false);
         fetchData();
     };
@@ -167,6 +169,7 @@ export function ReservasTab({ visitas, disponibilidad, fetchData, user, selected
             updated_at: new Date().toISOString()
         }).eq('id', editingVisita.id);
         if (error) throw error;
+        await emitirSyncSignal('editar_reserva');
         setEditingVisita(null);
         fetchData();
     };
@@ -260,6 +263,8 @@ export function CalendarioTab({ currentMonth, setCurrentMonth, selectedDate, set
         if (error) {
             console.error('Error updating capacity:', error);
             alert(`Error al actualizar capacidad: ${error.message}`);
+        } else {
+            await emitirSyncSignal('disponibilidad');
         }
         fetchData();
     };
@@ -271,6 +276,8 @@ export function CalendarioTab({ currentMonth, setCurrentMonth, selectedDate, set
         if (error) {
             console.error('Error updating horario:', error);
             alert(`Error al actualizar horario: ${error.message}`);
+        } else {
+            await emitirSyncSignal('disponibilidad');
         }
         fetchData();
     };
@@ -280,6 +287,8 @@ export function CalendarioTab({ currentMonth, setCurrentMonth, selectedDate, set
         if (error) {
             console.error('Error toggling quotas:', error);
             alert(`Error al cambiar estado de cupos: ${error.message}`);
+        } else {
+            await emitirSyncSignal('cierre_cupos');
         }
         fetchData();
     };
@@ -292,6 +301,7 @@ export function CalendarioTab({ currentMonth, setCurrentMonth, selectedDate, set
             alert(`Error al bloquear el día: ${error.message}`);
             return;
         }
+        await emitirSyncSignal('bloqueo');
         setBlockModal({ open: false, fecha: '', motivo: '' });
         fetchData();
     };
@@ -301,6 +311,8 @@ export function CalendarioTab({ currentMonth, setCurrentMonth, selectedDate, set
         if (error) {
             console.error('Error unblocking day:', error);
             alert(`Error al desbloquear el día: ${error.message}`);
+        } else {
+            await emitirSyncSignal('desbloqueo');
         }
         fetchData();
     };
@@ -316,7 +328,12 @@ export function CalendarioTab({ currentMonth, setCurrentMonth, selectedDate, set
             if (!existing.has(`${date}-es`)) inserts.push({ fecha: date, horario: '19:00:00', idioma: 'es', capacidad_maxima: 20 });
             if (!existing.has(`${date}-en`)) inserts.push({ fecha: date, horario: '19:30:00', idioma: 'en', capacidad_maxima: 20 });
         }
-        if (inserts.length > 0) await supabase.from('disponibilidad').insert(inserts);
+        if (inserts.length > 0) {
+            const { error } = await supabase.from('disponibilidad').insert(inserts);
+            if (!error) {
+                await emitirSyncSignal('disponibilidad');
+            }
+        }
         setBulkLoading(false);
         fetchData();
     };

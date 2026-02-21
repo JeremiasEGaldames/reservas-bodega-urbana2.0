@@ -10,6 +10,7 @@ import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth';
 import type { Disponibilidad, Visita } from '@/lib/types';
 import { PanelTab, ReservasTab, CalendarioTab, HuespedesTab, AnalisisTab, ConfigTab, UsuariosTab } from './AdminTabs';
+import { emitirSyncSignal } from '@/lib/syncSignal';
 
 type AdminTab = 'panel' | 'reservas' | 'calendario' | 'huespedes' | 'analisis' | 'config' | 'usuarios';
 
@@ -108,7 +109,10 @@ function AdminContent() {
     }, [fetchData]);
 
     const handleChangeStatus = async (id: string, estado: Visita['estado']) => {
-        await supabase.from('visitas').update({ estado, updated_at: new Date().toISOString() }).eq('id', id);
+        const { error } = await supabase.from('visitas').update({ estado, updated_at: new Date().toISOString() }).eq('id', id);
+        if (!error) {
+            await emitirSyncSignal(estado === 'cancelada' ? 'cancelar_reserva' : 'editar_reserva');
+        }
         fetchData();
     };
 
@@ -123,6 +127,7 @@ function AdminContent() {
                     alert(`Error al eliminar la reserva: ${error.message}`);
                     return;
                 }
+                await emitirSyncSignal('eliminar_reserva');
                 setConfirmModal((prev) => ({ ...prev, open: false }));
                 fetchData();
             },

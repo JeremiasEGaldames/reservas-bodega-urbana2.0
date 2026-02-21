@@ -33,6 +33,7 @@ function ReservasContent() {
     const [horaSync, setHoraSync] = useState<string>('');
     const formularioAbierto = useRef(false);
     const pendienteActualizacion = useRef(false);
+    const ultimoSignal = useRef<string>('');
     const ultimaActualizacion = useRef<Date>(new Date());
 
     const [confirmModal, setConfirmModal] = useState<{
@@ -74,6 +75,7 @@ function ReservasContent() {
         ultimaActualizacion.current = new Date();
         fetchData();
         setHoraSync(new Date().toLocaleTimeString('es-AR'));
+        pendienteActualizacion.current = false;
     }
 
     useEffect(() => {
@@ -81,51 +83,51 @@ function ReservasContent() {
         setHoraSync(new Date().toLocaleTimeString('es-AR'));
     }, [fetchData]);
 
-    // Canal Realtime para Disponibilidad (General)
+    // Polling del signal — cada 5 segundos
+    // Consulta ultra liviana a una sola fila
     useEffect(() => {
-        const canal = supabase
-            .channel('disp-recepcion')
-            .on(
-                'postgres_changes',
-                { event: '*', schema: 'public', table: 'disponibilidad' },
-                () => sincronizar()
-            )
-            .subscribe();
+        const intervalo = setInterval(async () => {
+            const { data } = await supabase
+                .from('sync_signal')
+                .select('updated_at, motivo')
+                .eq('id', 1)
+                .single();
 
-        return () => { supabase.removeChannel(canal); };
-    }, []);
+            if (!data) return;
 
-    // Canal Realtime para Visitas (Filtrado por fecha seleccionada)
-    useEffect(() => {
-        if (!selectedDate) return;
+            // Solo recargar si el timestamp cambió
+            const nuevoSignal = data.updated_at;
+            if (nuevoSignal !== ultimoSignal.current) {
+                const esPrimeraCarga = ultimoSignal.current === '';
+                ultimoSignal.current = nuevoSignal;
 
-        const canal = supabase
-            .channel(`visitas-${selectedDate}`)
-            .on(
-                'postgres_changes',
-                {
-                    event: '*',
-                    schema: 'public',
-                    table: 'visitas',
-                    filter: `fecha=eq.${selectedDate}`
-                },
-                () => sincronizar()
-            )
-            .subscribe();
-
-        return () => { supabase.removeChannel(canal); };
-    }, [selectedDate]);
-
-    // Polling cada 10 segundos (Capa 2 de seguridad)
-    useEffect(() => {
-        const intervalo = setInterval(() => {
-            sincronizar();
-        }, 10000);
+                // No recargar en la primera carga (ya se hace al montar)
+                if (!esPrimeraCarga) {
+                    sincronizar();
+                }
+            }
+        }, 5000);
 
         return () => clearInterval(intervalo);
     }, [selectedDate]);
 
-    // Visibilitychange — al volver a la pestaña (Capa 3 de seguridad)
+    // Inicializar el signal al montar
+    useEffect(() => {
+        async function inicializarSignal() {
+            const { data } = await supabase
+                .from('sync_signal')
+                .select('updated_at')
+                .eq('id', 1)
+                .single();
+
+            if (data) {
+                ultimoSignal.current = data.updated_at;
+            }
+        }
+        inicializarSignal();
+    }, []);
+
+    // Visibilitychange — al volver a la pestaña (Capa de seguridad extra)
     useEffect(() => {
         function handleVisibility() {
             if (document.visibilityState === 'visible') {
@@ -356,9 +358,7 @@ function ReservasContent() {
                                                 setMostrarForm(false);
                                                 formularioAbierto.current = false;
                                                 if (pendienteActualizacion.current) {
-                                                    fetchData();
-                                                    setHoraSync(new Date().toLocaleTimeString('es-AR'));
-                                                    pendienteActualizacion.current = false;
+                                                    sincronizar();
                                                 }
                                             }}
                                         />
@@ -374,9 +374,7 @@ function ReservasContent() {
                                                 setMostrarForm(false);
                                                 formularioAbierto.current = false;
                                                 if (pendienteActualizacion.current) {
-                                                    fetchData();
-                                                    setHoraSync(new Date().toLocaleTimeString('es-AR'));
-                                                    pendienteActualizacion.current = false;
+                                                    sincronizar();
                                                 }
                                             }}
                                         />
