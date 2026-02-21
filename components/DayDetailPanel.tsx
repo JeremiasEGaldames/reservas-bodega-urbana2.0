@@ -48,57 +48,79 @@ export default function DayDetailPanel({ selectedDate, turnos, onClose }: DayDet
 
             <div className="space-y-3">
                 {turnos.map((turno) => {
-                    const isClosed = turno.bloqueada || turno.cupos_cerrados || !turno.disponible;
-                    const pct = turno.capacidad_maxima > 0
-                        ? ((turno.capacidad_maxima - turno.cupos_disponibles) / turno.capacidad_maxima) * 100
-                        : 0;
+                    const cuposRestantes = turno.cupos_disponibles;
+                    const capacidadMaxima = turno.capacidad_maxima;
+
+                    let bgColor = 'var(--color-bg)';
+                    let borderColor = 'var(--color-border-light)';
+                    let textColor = 'var(--color-text)';
+                    let subtitleColor = 'var(--color-text-muted)';
+                    let cuposColor = 'var(--color-success)';
+                    let cursor = 'cursor-pointer';
+                    let label = `${cuposRestantes} cupos disponibles`;
+                    let isDisabled = false;
+
+                    if (turno.bloqueada) {
+                        bgColor = '#f3f4f6'; // bg-gray-100
+                        borderColor = '#e5e7eb'; // border-gray-200
+                        textColor = '#9ca3af'; // text-gray-400
+                        subtitleColor = '#9ca3af';
+                        cuposColor = '#9ca3af';
+                        cursor = 'cursor-not-allowed';
+                        label = 'Bloqueado';
+                        isDisabled = true;
+                    } else if (turno.cupos_cerrados) {
+                        bgColor = '#f3f4f6'; // bg-gray-100
+                        borderColor = '#e5e7eb'; // border-gray-200
+                        textColor = '#9ca3af'; // text-gray-400
+                        subtitleColor = '#9ca3af';
+                        cuposColor = '#9ca3af';
+                        cursor = 'cursor-not-allowed';
+                        label = 'Cupos cerrados';
+                        isDisabled = true;
+                    } else if (cuposRestantes <= 0) {
+                        bgColor = '#fef2f2'; // bg-red-50
+                        borderColor = '#fecaca'; // border-red-200
+                        textColor = '#f87171'; // text-red-400
+                        subtitleColor = '#f87171';
+                        cuposColor = '#ef4444'; // text-red-500
+                        cursor = 'cursor-not-allowed';
+                        label = 'Sin cupos';
+                        isDisabled = true;
+                    } else if (cuposRestantes / capacidadMaxima <= 0.25) {
+                        borderColor = '#fcd34d'; // border-amber-300
+                        cuposColor = '#d97706'; // text-amber-600
+                        label = `${cuposRestantes} cupos disponibles`;
+                    }
 
                     return (
                         <div
                             key={turno.id}
-                            className={`p-3 rounded-lg ${isClosed ? 'opacity-50' : ''}`}
+                            className={`p-3 rounded-lg transition-all ${!isDisabled ? 'hover:shadow-md' : ''}`}
                             style={{
-                                background: 'var(--color-bg)',
-                                border: '1px solid var(--color-border-light)',
+                                background: bgColor,
+                                border: `1px solid ${borderColor}`,
+                                cursor: cursor
                             }}
                         >
-                            <div className="flex items-center justify-between mb-2">
+                            <div className="flex items-center justify-between">
                                 <div className="flex items-center gap-2">
                                     <span className="text-lg">
                                         {turno.idioma === 'es' ? '🇪🇸' : '🇬🇧'}
                                     </span>
                                     <div>
-                                        <span className="text-sm font-semibold" style={{ color: 'var(--color-text)' }}>
+                                        <span className="text-sm font-semibold" style={{ color: textColor }}>
                                             {turno.horario?.slice(0, 5)} hs
                                         </span>
-                                        <span className="text-xs ml-2" style={{ color: 'var(--color-text-muted)' }}>
+                                        <span className="text-xs ml-2" style={{ color: subtitleColor }}>
                                             {turno.idioma === 'es' ? 'Español' : 'Inglés'}
                                         </span>
                                     </div>
                                 </div>
-                                {isClosed ? (
-                                    <span className="text-[11px] font-medium px-2 py-0.5 rounded-full" style={{ background: '#f3f4f6', color: '#6b7280' }}>
-                                        {turno.bloqueada ? 'Bloqueado' : 'Cerrado'}
-                                    </span>
-                                ) : (
-                                    <span className="text-sm font-bold" style={{
-                                        color: turno.cupos_disponibles > 5 ? 'var(--color-success)' : turno.cupos_disponibles > 0 ? 'var(--color-warning)' : 'var(--color-danger)',
-                                    }}>
-                                        {turno.cupos_disponibles} / {turno.capacidad_maxima}
-                                    </span>
-                                )}
+                                <span className="text-[11px] font-bold" style={{ color: cuposColor }}>
+                                    {label}
+                                </span>
                             </div>
-                            {!isClosed && (
-                                <div className="w-full h-1.5 rounded-full overflow-hidden" style={{ background: 'var(--color-border-light)' }}>
-                                    <div
-                                        className="h-full rounded-full transition-all duration-500"
-                                        style={{
-                                            width: `${pct}%`,
-                                            background: pct > 80 ? 'var(--color-danger)' : pct > 50 ? 'var(--color-warning)' : 'var(--color-success)',
-                                        }}
-                                    />
-                                </div>
-                            )}
                         </div>
                     );
                 })}

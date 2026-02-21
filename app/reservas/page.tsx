@@ -235,7 +235,8 @@ function ReservasContent() {
 
     const turnos = selectedDate ? getTurnos(selectedDate) : [];
 
-    const initialFormData: Partial<ReservaFormData> | undefined = editingVisita ? {
+    const initialFormData: Partial<ReservaFormData & { id: string }> | undefined = editingVisita ? {
+        id: editingVisita.id,
         nombre: editingVisita.nombre,
         apellido: editingVisita.apellido,
         hotel: editingVisita.hotel,

@@ -63,6 +63,7 @@ export default function ReservationForm({
                 body: JSON.stringify({
                     fecha: selectedDate,
                     idioma: form.idioma,
+                    reservaId: initialData && isEditing ? (initialData as any).id : null,
                 }),
             });
 

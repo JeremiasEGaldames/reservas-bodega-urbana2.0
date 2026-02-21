@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 
 export async function POST(req: NextRequest) {
     try {
-        const { fecha, idioma } = await req.json();
+        const { fecha, idioma, reservaId } = await req.json();
 
         if (!fecha || !idioma) {
             return NextResponse.json(
@@ -61,13 +61,18 @@ export async function POST(req: NextRequest) {
         }
 
         // Contar reservas activas para ese turno
-        const { data: reservasActivas, error: errorCount } =
-            await supabase
-                .from('visitas')
-                .select('cantidad_huespedes')
-                .eq('fecha', fecha)
-                .eq('idioma', idioma)
-                .neq('estado', 'cancelada');
+        let query = supabase
+            .from('visitas')
+            .select('cantidad_huespedes')
+            .eq('fecha', fecha)
+            .eq('idioma', idioma)
+            .neq('estado', 'cancelada');
+
+        if (reservaId) {
+            query = query.neq('id', reservaId);
+        }
+
+        const { data: reservasActivas, error: errorCount } = await query;
 
         if (errorCount) {
             return NextResponse.json(
