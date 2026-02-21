@@ -38,7 +38,7 @@ export default function ReservationForm({
     const [error, setError] = useState<string | null>(null);
 
     const selectedTurno = turnos.find((t) => t.idioma === form.idioma);
-    const horario = selectedTurno?.horario || (form.idioma === 'es' ? '19:00:00' : '19:30:00');
+    const horario = selectedTurno?.horario || (form.idioma === 'pt' ? '18:30:00' : form.idioma === 'es' ? '19:00:00' : '19:30:00');
 
     // Determinar si el día está bloqueado o no disponible
     const allTurnsBlocked = turnos.length > 0 && turnos.every(t => t.bloqueada);
@@ -360,7 +360,8 @@ export default function ReservationForm({
                                         >
                                             <div>{turno.horario.slice(0, 5)}</div>
                                             <div className="text-[11px] opacity-80 mt-0.5">
-                                                {turno.idioma === 'es' ? '🇪🇸 Español' : '🇬🇧 Inglés'}
+                                                {turno.idioma === 'pt' ? '🇧🇷 Português' :
+                                                    turno.idioma === 'es' ? '🇦🇷 Español' : '🇬🇧 English'}
                                             </div>
                                             <div className="text-[10px] opacity-60 mt-0.5">
                                                 {turno.cupos_disponibles} cupos

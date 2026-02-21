@@ -162,6 +162,13 @@ function ReservasContent() {
         });
     };
 
+    // Helper para labels de idioma
+    const getIdiomaLabel = (idioma: string) => {
+        if (idioma === 'pt') return '🇧🇷 Português';
+        if (idioma === 'es') return '🇦🇷 Español';
+        return '🇬🇧 English';
+    };
+
     const handleCreateReserva = async (data: ReservaFormData & { fecha: string; horario: string }) => {
         const { error } = await supabase.from('visitas').insert({
             fecha: data.fecha,

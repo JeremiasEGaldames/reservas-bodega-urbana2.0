@@ -82,7 +82,7 @@ export function PanelTab({ visitas, disponibilidad }: { visitas: Visita[], dispo
                         <div key={t.id} className="flex items-center justify-between p-3 rounded-lg mb-2" style={{ background: 'var(--color-bg)', border: t.bloqueada || t.cupos_cerrados ? '1px dashed var(--color-danger-light)' : 'none' }}>
                             <div className="flex flex-col">
                                 <span className="text-sm font-medium">
-                                    {t.idioma === 'es' ? '🇪🇸' : '🇬🇧'} {t.horario?.slice(0, 5)} — {t.idioma === 'es' ? 'Español' : 'Inglés'}
+                                    {t.idioma === 'pt' ? '🇧🇷' : t.idioma === 'es' ? '🇦🇷' : '🇬🇧'} {t.horario?.slice(0, 5)} — {t.idioma === 'pt' ? 'Português' : t.idioma === 'es' ? 'Español' : 'Inglés'}
                                 </span>
                                 {(t.bloqueada || t.cupos_cerrados) && (
                                     <span className="text-[10px] uppercase font-bold text-red-500">
@@ -212,7 +212,8 @@ export function ReservasTab({ visitas, disponibilidad, fetchData, user, selected
                 </select>
                 <select value={filterIdioma} onChange={(e) => setFilterIdioma(e.target.value)} className="px-3 py-2 text-sm rounded-lg cursor-pointer" style={{ border: '1px solid var(--color-border)', background: 'var(--color-bg)' }}>
                     <option value="">Todos los turnos</option>
-                    <option value="es">🇪🇸 Español</option>
+                    <option value="pt">🇧🇷 Português</option>
+                    <option value="es">🇦🇷 Español</option>
                     <option value="en">🇬🇧 Inglés</option>
                 </select>
             </div>
@@ -300,6 +301,7 @@ export function CalendarioTab({ currentMonth, setCurrentMonth, selectedDate, set
         const inserts: any[] = [];
         for (let i = 0; i < bulkDays; i++) {
             const date = format(new Date(today.getTime() + i * 86400000), 'yyyy-MM-dd');
+            if (!existing.has(`${date}-pt`)) inserts.push({ fecha: date, horario: '18:30:00', idioma: 'pt', capacidad_maxima: 20 });
             if (!existing.has(`${date}-es`)) inserts.push({ fecha: date, horario: '19:00:00', idioma: 'es', capacidad_maxima: 20 });
             if (!existing.has(`${date}-en`)) inserts.push({ fecha: date, horario: '19:30:00', idioma: 'en', capacidad_maxima: 20 });
         }
@@ -345,7 +347,7 @@ export function CalendarioTab({ currentMonth, setCurrentMonth, selectedDate, set
                                 {turnos.map((t) => (
                                     <div key={t.id} className="p-3 rounded-lg mb-2" style={{ background: 'var(--color-bg)', border: '1px solid var(--color-border-light)' }}>
                                         <div className="flex items-center justify-between mb-2">
-                                            <span className="text-sm font-medium">{t.idioma === 'es' ? '🇪🇸 ES' : '🇬🇧 EN'} {t.horario?.slice(0, 5)}</span>
+                                            <span className="text-sm font-medium">{t.idioma === 'pt' ? '🇧🇷 PT' : t.idioma === 'es' ? '🇦🇷 ES' : '🇬🇧 EN'} {t.horario?.slice(0, 5)}</span>
                                         </div>
                                         <div className="flex items-center gap-2 mb-2">
                                             <label className="text-xs" style={{ color: 'var(--color-text-secondary)' }}>Cupos:</label>
@@ -418,7 +420,8 @@ export function HuespedesTab({ visitas, lastSync, fetchData, onChangeStatus, onD
                 <input type="date" value={dateRange} onChange={(e) => setDateRange(e.target.value)} className="px-3 py-2 text-sm rounded-lg" style={{ border: '1px solid var(--color-border)', background: 'var(--color-bg)' }} />
                 <select value={filterTurno} onChange={(e) => setFilterTurno(e.target.value)} className="px-3 py-2 text-sm rounded-lg cursor-pointer" style={{ border: '1px solid var(--color-border)', background: 'var(--color-bg)' }}>
                     <option value="">Todos los turnos</option>
-                    <option value="es">🇪🇸 Español</option>
+                    <option value="pt">🇧🇷 Português</option>
+                    <option value="es">🇦🇷 Español</option>
                     <option value="en">🇬🇧 Inglés</option>
                 </select>
                 <select value={filterHotel} onChange={(e) => setFilterHotel(e.target.value)} className="px-3 py-2 text-sm rounded-lg cursor-pointer" style={{ border: '1px solid var(--color-border)', background: 'var(--color-bg)' }}>
@@ -456,7 +459,7 @@ export function HuespedesTab({ visitas, lastSync, fetchData, onChangeStatus, onD
                                     <td className="px-4 py-3 hidden md:table-cell" style={{ color: 'var(--color-text-secondary)' }}>{v.hotel}</td>
                                     <td className="px-4 py-3 hidden lg:table-cell text-xs" style={{ color: 'var(--color-text-muted)' }}>{v.hotel === 'Externo' ? <>{v.email}<br />{v.telefono}</> : '—'}</td>
                                     <td className="px-4 py-3 text-center">{v.cantidad_huespedes}</td>
-                                    <td className="px-4 py-3 text-center">{v.idioma === 'es' ? '🇪🇸' : '🇬🇧'}</td>
+                                    <td className="px-4 py-3 text-center">{v.idioma === 'pt' ? '🇧🇷' : v.idioma === 'es' ? '🇦🇷' : '🇬🇧'}</td>
                                     <td className="px-4 py-3 text-center">
                                         <select value={v.estado} onChange={(e) => onChangeStatus(v.id, e.target.value as Visita['estado'])} className="text-xs px-2 py-1 rounded-md cursor-pointer" style={{ border: '1px solid var(--color-border)', background: 'var(--color-bg)' }}>
                                             <option value="pendiente">Pendiente</option>
@@ -490,6 +493,7 @@ export function AnalisisTab({ visitas }: { visitas: Visita[] }) {
 
     const rangeVisitas = visitas.filter((v) => v.fecha >= startDate && v.fecha <= endDate && v.estado !== 'cancelada');
     const totalReservas = rangeVisitas.length;
+    const reservasPt = rangeVisitas.filter((v) => v.idioma === 'pt').length;
     const reservasEs = rangeVisitas.filter((v) => v.idioma === 'es').length;
     const reservasEn = rangeVisitas.filter((v) => v.idioma === 'en').length;
     const totalHuespedes = rangeVisitas.reduce((s, v) => s + v.cantidad_huespedes, 0);
@@ -497,8 +501,8 @@ export function AnalisisTab({ visitas }: { visitas: Visita[] }) {
     const uniqueDays = new Set(rangeVisitas.map((v) => v.fecha));
     const promedioDiario = uniqueDays.size > 0 ? (totalReservas / uniqueDays.size).toFixed(1) : '0';
     const porHotel = ['Sheraton', 'Huentala', 'Hualta', 'Externo'].map((h) => ({ name: h, value: rangeVisitas.filter((v) => v.hotel === h).length }));
-    const pieData = [{ name: 'Español', value: reservasEs }, { name: 'Inglés', value: reservasEn }];
-    const COLORS = ['var(--color-primary)', '#6366f1'];
+    const pieData = [{ name: 'Português', value: reservasPt }, { name: 'Español', value: reservasEs }, { name: 'Inglés', value: reservasEn }];
+    const COLORS = ['#10b981', 'var(--color-primary)', '#6366f1'];
     const dateCountMap: Record<string, number> = {};
     rangeVisitas.forEach((v) => { dateCountMap[v.fecha] = (dateCountMap[v.fecha] || 0) + 1; });
     const topDates = Object.entries(dateCountMap).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([fecha, total]) => ({ fecha, total }));
@@ -599,6 +603,18 @@ export function ConfigTab({ fetchData }: { fetchData: () => void }) {
             // 2. Aplicar a todos los días futuros en disponibilidad
             const todayStr = format(new Date(), 'yyyy-MM-dd');
 
+            // Actualizar PT
+            const updatePT: any = {};
+            if (config.horario_pt) updatePT.horario = config.horario_pt;
+            if (config.capacidad_default_pt) updatePT.capacidad_maxima = parseInt(config.capacidad_default_pt);
+
+            if (Object.keys(updatePT).length > 0) {
+                await supabase.from('disponibilidad')
+                    .update(updatePT)
+                    .eq('idioma', 'pt')
+                    .gte('fecha', todayStr);
+            }
+
             // Actualizar ES
             const updateES: any = {};
             if (config.horario_es) updateES.horario = config.horario_es;
@@ -669,11 +685,28 @@ export function ConfigTab({ fetchData }: { fetchData: () => void }) {
                     <p className="text-xs mt-1" style={{ color: 'var(--color-text-muted)' }}>Los cambios realizados aquí se aplicarán automáticamente a todos los días futuros en el calendario.</p>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                    {/* Portugués Section */}
+                    <div className="space-y-4">
+                        <h3 className="text-sm font-bold flex items-center gap-2" style={{ color: 'var(--color-primary)' }}>
+                            <span>🇧🇷</span> Turno Portugués
+                        </h3>
+                        <div className="space-y-3">
+                            <div>
+                                <label className="block text-xs font-medium mb-1" style={{ color: 'var(--color-text-muted)' }}>Horario (HH:MM)</label>
+                                <input type="time" value={config.horario_pt || '18:30'} onChange={(e) => setConfig({ ...config, horario_pt: e.target.value })} className="w-full px-3 py-2 text-sm rounded-lg" style={{ border: '1px solid var(--color-border)', background: 'var(--color-bg)' }} />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-medium mb-1" style={{ color: 'var(--color-text-muted)' }}>Capacidad (Cupos)</label>
+                                <input type="number" value={config.capacidad_default_pt || '20'} onChange={(e) => setConfig({ ...config, capacidad_default_pt: e.target.value })} className="w-full px-3 py-2 text-sm rounded-lg" style={{ border: '1px solid var(--color-border)', background: 'var(--color-bg)' }} />
+                            </div>
+                        </div>
+                    </div>
+
                     {/* Español Section */}
                     <div className="space-y-4">
                         <h3 className="text-sm font-bold flex items-center gap-2" style={{ color: 'var(--color-primary)' }}>
-                            <span>🇪🇸</span> Turno Español
+                            <span>🇦🇷</span> Turno Español
                         </h3>
                         <div className="space-y-3">
                             <div>

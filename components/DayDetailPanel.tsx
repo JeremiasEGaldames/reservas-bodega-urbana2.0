@@ -106,14 +106,17 @@ export default function DayDetailPanel({ selectedDate, turnos, onClose }: DayDet
                             <div className="flex items-center justify-between">
                                 <div className="flex items-center gap-2">
                                     <span className="text-lg">
-                                        {turno.idioma === 'es' ? '🇪🇸' : '🇬🇧'}
+                                        {turno.idioma === 'pt' ? '🇧🇷' :
+                                            turno.idioma === 'es' ? '🇦🇷' : '🇬🇧'}
                                     </span>
                                     <div>
                                         <span className="text-sm font-semibold" style={{ color: textColor }}>
                                             {turno.horario?.slice(0, 5)} hs
                                         </span>
                                         <span className="text-xs ml-2" style={{ color: subtitleColor }}>
-                                            {turno.idioma === 'es' ? 'Español' : 'Inglés'}
+                                            {turno.idioma === 'pt' ? '🇧🇷 Português' :
+                                                turno.idioma === 'es' ? '🇦🇷 Español' :
+                                                    '🇬🇧 English'}
                                         </span>
                                     </div>
                                 </div>

@@ -3,7 +3,7 @@
 // ========================
 
 export type RolUsuario = 'recepcion' | 'admin';
-export type IdiomaType = 'es' | 'en';
+export type IdiomaType = 'es' | 'en' | 'pt';
 export type HotelType = 'Sheraton' | 'Huentala' | 'Hualta' | 'Externo';
 export type EstadoReserva = 'pendiente' | 'confirmada' | 'cancelada';
 

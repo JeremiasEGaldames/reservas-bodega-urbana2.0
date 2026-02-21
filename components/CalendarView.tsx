@@ -44,27 +44,31 @@ export default function CalendarView({
         const dayDisp = disponibilidad.filter((d) => d.fecha === dateStr);
         const dayVisitas = visitas.filter((v) => v.fecha === dateStr && v.estado !== 'cancelada');
 
-        if (dayDisp.length === 0) return { status: 'none' as const, esSlots: 0, enSlots: 0, esCap: 0, enCap: 0 };
+        if (dayDisp.length === 0) return { status: 'none' as const, ptSlots: 0, esSlots: 0, enSlots: 0, ptCap: 0, esCap: 0, enCap: 0 };
 
+        const ptDisp = dayDisp.find((d) => d.idioma === 'pt');
         const esDisp = dayDisp.find((d) => d.idioma === 'es');
         const enDisp = dayDisp.find((d) => d.idioma === 'en');
 
+        const ptReservas = dayVisitas.filter((v) => v.idioma === 'pt').reduce((sum, v) => sum + v.cantidad_huespedes, 0);
         const esReservas = dayVisitas.filter((v) => v.idioma === 'es').reduce((sum, v) => sum + v.cantidad_huespedes, 0);
         const enReservas = dayVisitas.filter((v) => v.idioma === 'en').reduce((sum, v) => sum + v.cantidad_huespedes, 0);
 
+        const ptCap = ptDisp?.capacidad_maxima ?? 0;
         const esCap = esDisp?.capacidad_maxima ?? 0;
         const enCap = enDisp?.capacidad_maxima ?? 0;
+        const ptSlots = Math.max(0, ptCap - ptReservas);
         const esSlots = Math.max(0, esCap - esReservas);
         const enSlots = Math.max(0, enCap - enReservas);
 
         const allBlocked = dayDisp.every((d) => d.bloqueada || d.cupos_cerrados || !d.disponible);
-        const totalSlots = esSlots + enSlots;
-        const totalCap = esCap + enCap;
+        const totalSlots = ptSlots + esSlots + enSlots;
+        const totalCap = ptCap + esCap + enCap;
 
-        if (allBlocked) return { status: 'blocked' as const, esSlots, enSlots, esCap, enCap };
-        if (totalSlots === 0) return { status: 'full' as const, esSlots, enSlots, esCap, enCap };
-        if (totalSlots < totalCap * 0.3) return { status: 'limited' as const, esSlots, enSlots, esCap, enCap };
-        return { status: 'available' as const, esSlots, enSlots, esCap, enCap };
+        if (allBlocked) return { status: 'blocked' as const, ptSlots, esSlots, enSlots, ptCap, esCap, enCap };
+        if (totalSlots === 0) return { status: 'full' as const, ptSlots, esSlots, enSlots, ptCap, esCap, enCap };
+        if (totalSlots < totalCap * 0.3) return { status: 'limited' as const, ptSlots, esSlots, enSlots, ptCap, esCap, enCap };
+        return { status: 'available' as const, ptSlots, esSlots, enSlots, ptCap, esCap, enCap };
     };
 
     const statusColors = {
@@ -131,7 +135,7 @@ export default function CalendarView({
                     const currentMonth_ = isSameMonth(day, currentMonth);
                     const selected = selectedDate === dateStr;
                     const today = isToday(day);
-                    const { status, esSlots, enSlots } = getDayStatus(day);
+                    const { status, ptSlots, esSlots, enSlots } = getDayStatus(day);
 
                     return (
                         <button
@@ -162,6 +166,13 @@ export default function CalendarView({
                             </span>
                             {currentMonth_ && status !== 'none' && (
                                 <div className="flex gap-0.5 mt-0.5">
+                                    <span
+                                        className="w-1.5 h-1.5 rounded-full"
+                                        style={{
+                                            background: ptSlots > 0 ? statusColors[status].dot : '#ef4444',
+                                        }}
+                                        title={`PT: ${ptSlots} cupos`}
+                                    />
                                     <span
                                         className="w-1.5 h-1.5 rounded-full"
                                         style={{
@@ -196,6 +207,9 @@ export default function CalendarView({
                 </span>
                 <span className="flex items-center gap-1.5">
                     <span className="w-2 h-2 rounded-full" style={{ background: '#9ca3af' }} /> Bloqueado
+                </span>
+                <span className="ml-auto opacity-70">
+                    · Punto izq = PT 18:30, medio = ES 19:00, der = EN 19:30
                 </span>
             </div>
         </div>
