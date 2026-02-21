@@ -484,10 +484,7 @@ export function CalendarioTab({ currentMonth, setCurrentMonth, selectedDate, set
                             </div>
                             <h3 className="text-base font-semibold" style={{ color: 'var(--color-text)' }}>{confirmAction.title}</h3>
                         </div>
-                        <p className="text-sm mb-2" style={{ color: 'var(--color-text-secondary)' }}>{confirmAction.message}</p>
-                        <p className="text-xs mb-5 font-medium" style={{ color: 'var(--color-warning, #d97706)' }}>
-                            ⚠️ El panel de Recepción se recargará automáticamente al confirmar.
-                        </p>
+                        <p className="text-sm mb-5" style={{ color: 'var(--color-text-secondary)' }}>{confirmAction.message}</p>
                         <div className="flex gap-3 justify-end">
                             <button
                                 onClick={() => setConfirmAction({ ...confirmAction, open: false })}
