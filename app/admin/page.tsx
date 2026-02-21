@@ -47,7 +47,10 @@ function AdminContent() {
         const endDate = format(addMonths(currentMonth, 4), 'yyyy-MM-01');
 
         const [dispRes, visitasRes] = await Promise.all([
-            supabase.from('disponibilidad').select('*').gte('fecha', startDate).lt('fecha', endDate).order('fecha'),
+            supabase.rpc('get_disponibilidad', {
+                p_fecha_inicio: startDate,
+                p_fecha_fin: endDate
+            }),
             supabase.from('visitas').select('*').gte('fecha', startDate).lt('fecha', endDate).order('created_at', { ascending: false }),
         ]);
 
