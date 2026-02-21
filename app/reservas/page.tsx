@@ -65,25 +65,78 @@ function ReservasContent() {
         fetchData();
     }, [fetchData]);
 
-    // Realtime subscriptions
+    // Realtime subscriptions & Polling (Capas 1 y 2)
     useEffect(() => {
-        const dispChannel = supabase
-            .channel('disponibilidad-changes')
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'disponibilidad' }, () => {
-                fetchData();
-            })
-            .subscribe();
+        let dispChannel: any;
+        let visitasChannel: any;
 
-        const visitasChannel = supabase
-            .channel('visitas-changes')
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'visitas' }, () => {
-                fetchData();
-            })
-            .subscribe();
+        const subscribeDisp = () => {
+            dispChannel = supabase
+                .channel('disponibilidad-changes')
+                .on('postgres_changes', { event: '*', schema: 'public', table: 'disponibilidad' }, () => {
+                    fetchData();
+                })
+                .subscribe((status) => {
+                    if (status === 'SUBSCRIBED') {
+                        console.log('Realtime disponibilidad conectado');
+                    }
+                    if (status === 'CLOSED' || status === 'CHANNEL_ERROR') {
+                        console.warn('Realtime disponibilidad desconectado, reconectando...');
+                        setTimeout(() => {
+                            if (dispChannel) supabase.removeChannel(dispChannel);
+                            subscribeDisp();
+                        }, 3000);
+                    }
+                });
+        };
+
+        const subscribeVisitas = () => {
+            visitasChannel = supabase
+                .channel('visitas-changes')
+                .on('postgres_changes', { event: '*', schema: 'public', table: 'visitas' }, () => {
+                    fetchData();
+                })
+                .subscribe((status) => {
+                    if (status === 'SUBSCRIBED') {
+                        console.log('Realtime visitas conectado');
+                    }
+                    if (status === 'CLOSED' || status === 'CHANNEL_ERROR') {
+                        console.warn('Realtime visitas desconectado, reconectando...');
+                        setTimeout(() => {
+                            if (visitasChannel) supabase.removeChannel(visitasChannel);
+                            subscribeVisitas();
+                        }, 3000);
+                    }
+                });
+        };
+
+        subscribeDisp();
+        subscribeVisitas();
+
+        // Polling de respaldo cada 30 segundos (Capa 2)
+        const intervalo = setInterval(() => {
+            fetchData();
+        }, 30000);
 
         return () => {
-            supabase.removeChannel(dispChannel);
-            supabase.removeChannel(visitasChannel);
+            if (dispChannel) supabase.removeChannel(dispChannel);
+            if (visitasChannel) supabase.removeChannel(visitasChannel);
+            clearInterval(intervalo);
+        };
+    }, [fetchData]);
+
+    // Detector de visibilidad de pestaña (Capa 3)
+    useEffect(() => {
+        function handleVisibilityChange() {
+            if (document.visibilityState === 'visible') {
+                console.log('Pestaña visible — recargando datos');
+                fetchData();
+            }
+        }
+
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+        return () => {
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
         };
     }, [fetchData]);
 

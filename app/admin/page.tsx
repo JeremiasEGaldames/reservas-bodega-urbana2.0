@@ -61,11 +61,79 @@ function AdminContent() {
         fetchData();
     }, [fetchData]);
 
-    // Realtime logic
+    // Realtime logic & Polling (Capas 1 y 2)
     useEffect(() => {
-        const ch1 = supabase.channel('admin-disp').on('postgres_changes', { event: '*', schema: 'public', table: 'disponibilidad' }, () => { fetchData(); }).subscribe();
-        const ch2 = supabase.channel('admin-vis').on('postgres_changes', { event: '*', schema: 'public', table: 'visitas' }, () => { fetchData(); }).subscribe();
-        return () => { supabase.removeChannel(ch1); supabase.removeChannel(ch2); };
+        let dispChannel: any;
+        let visitasChannel: any;
+
+        const subscribeDisp = () => {
+            dispChannel = supabase
+                .channel('admin-disp')
+                .on('postgres_changes', { event: '*', schema: 'public', table: 'disponibilidad' }, () => {
+                    fetchData();
+                })
+                .subscribe((status) => {
+                    if (status === 'SUBSCRIBED') {
+                        console.log('Realtime admin-disp conectado');
+                    }
+                    if (status === 'CLOSED' || status === 'CHANNEL_ERROR') {
+                        console.warn('Realtime admin-disp desconectado, reconectando...');
+                        setTimeout(() => {
+                            if (dispChannel) supabase.removeChannel(dispChannel);
+                            subscribeDisp();
+                        }, 3000);
+                    }
+                });
+        };
+
+        const subscribeVisitas = () => {
+            visitasChannel = supabase
+                .channel('admin-vis')
+                .on('postgres_changes', { event: '*', schema: 'public', table: 'visitas' }, () => {
+                    fetchData();
+                })
+                .subscribe((status) => {
+                    if (status === 'SUBSCRIBED') {
+                        console.log('Realtime admin-vis conectado');
+                    }
+                    if (status === 'CLOSED' || status === 'CHANNEL_ERROR') {
+                        console.warn('Realtime admin-vis desconectado, reconectando...');
+                        setTimeout(() => {
+                            if (visitasChannel) supabase.removeChannel(visitasChannel);
+                            subscribeVisitas();
+                        }, 3000);
+                    }
+                });
+        };
+
+        subscribeDisp();
+        subscribeVisitas();
+
+        // Polling de respaldo cada 30 segundos (Capa 2)
+        const intervalo = setInterval(() => {
+            fetchData();
+        }, 30000);
+
+        return () => {
+            if (dispChannel) supabase.removeChannel(dispChannel);
+            if (visitasChannel) supabase.removeChannel(visitasChannel);
+            clearInterval(intervalo);
+        };
+    }, [fetchData]);
+
+    // Detector de visibilidad de pestaña (Capa 3)
+    useEffect(() => {
+        function handleVisibilityChange() {
+            if (document.visibilityState === 'visible') {
+                console.log('Admin: Pestaña visible — recargando datos');
+                fetchData();
+            }
+        }
+
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+        return () => {
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
+        };
     }, [fetchData]);
 
     const handleChangeStatus = async (id: string, estado: Visita['estado']) => {
