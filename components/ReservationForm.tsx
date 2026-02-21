@@ -34,6 +34,7 @@ export default function ReservationForm({
     });
     const [loading, setLoading] = useState(false);
     const [success, setSuccess] = useState(false);
+    const [error, setError] = useState<string | null>(null);
 
     const selectedTurno = turnos.find((t) => t.idioma === form.idioma);
     const horario = selectedTurno?.horario || (form.idioma === 'es' ? '19:00:00' : '19:30:00');
@@ -45,7 +46,27 @@ export default function ReservationForm({
         if (form.hotel === 'Externo' && (!form.email || !form.telefono)) return;
 
         setLoading(true);
+        setError(null);
+
         try {
+            // VALIDACIÓN EN SERVIDOR antes de insertar
+            const validacion = await fetch('/api/reservas/validar', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    fecha: selectedDate,
+                    idioma: form.idioma,
+                }),
+            });
+
+            const resultado = await validacion.json();
+
+            if (!resultado.permitido) {
+                setError(resultado.motivo || 'No es posible realizar esta reserva.');
+                setLoading(false);
+                return;
+            }
+
             await onSubmit({
                 ...form,
                 fecha: selectedDate,
@@ -100,6 +121,18 @@ export default function ReservationForm({
                         <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
                     </svg>
                     Reserva creada exitosamente
+                </div>
+            )}
+
+            {error && (
+                <div
+                    className="mb-4 p-3 rounded-lg text-sm font-medium flex items-center gap-2 animate-fade-in"
+                    style={{ background: 'var(--color-danger-light)', color: 'var(--color-danger)' }}
+                >
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 3.75h.008v.008H12v-.008Z" />
+                    </svg>
+                    {error}
                 </div>
             )}
 
