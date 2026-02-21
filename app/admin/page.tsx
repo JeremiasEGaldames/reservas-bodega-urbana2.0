@@ -69,44 +69,26 @@ function AdminContent() {
         fetchData();
     }, [fetchData]);
 
-    // Canal visitas — siempre activo
+    // Polling cada 10 segundos en admin
     useEffect(() => {
-        const canal = supabase
-            .channel('visitas-admin')
-            .on(
-                'postgres_changes',
-                {
-                    event: '*',
-                    schema: 'public',
-                    table: 'visitas'
-                },
-                () => {
-                    cargarVisitas();
-                }
-            )
-            .subscribe();
+        const intervalo = setInterval(() => {
+            cargarVisitas();
+            cargarDisponibilidad();
+        }, 10000);
 
-        return () => { supabase.removeChannel(canal); };
+        return () => clearInterval(intervalo);
     }, []);
 
-    // Canal disponibilidad — siempre activo
+    // Al volver a la pestaña
     useEffect(() => {
-        const canal = supabase
-            .channel('disp-admin')
-            .on(
-                'postgres_changes',
-                {
-                    event: '*',
-                    schema: 'public',
-                    table: 'disponibilidad'
-                },
-                () => {
-                    cargarDisponibilidad();
-                }
-            )
-            .subscribe();
-
-        return () => { supabase.removeChannel(canal); };
+        function handleVisibility() {
+            if (document.visibilityState === 'visible') {
+                cargarVisitas();
+                cargarDisponibilidad();
+            }
+        }
+        document.addEventListener('visibilitychange', handleVisibility);
+        return () => document.removeEventListener('visibilitychange', handleVisibility);
     }, []);
 
     const handleChangeStatus = async (id: string, estado: Visita['estado']) => {

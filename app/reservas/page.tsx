@@ -30,8 +30,11 @@ function ReservasContent() {
     const [loading, setLoading] = useState(true);
     const [editingVisita, setEditingVisita] = useState<Visita | null>(null);
     const [mostrarForm, setMostrarForm] = useState(false);
+    const [horaSync, setHoraSync] = useState<string>('');
     const formularioAbierto = useRef(false);
     const pendienteActualizacion = useRef(false);
+    const ultimaActualizacion = useRef<Date>(new Date());
+
     const [confirmModal, setConfirmModal] = useState<{
         open: boolean;
         title: string;
@@ -62,80 +65,41 @@ function ReservasContent() {
         setLoading(false);
     }, [currentMonth]);
 
-    function actualizarSiNoHayFormulario() {
+    function sincronizar() {
+        // No interrumpir si formulario está abierto
         if (formularioAbierto.current) {
             pendienteActualizacion.current = true;
             return;
         }
+        ultimaActualizacion.current = new Date();
         fetchData();
-        pendienteActualizacion.current = false;
+        setHoraSync(new Date().toLocaleTimeString('es-AR'));
     }
 
     useEffect(() => {
         fetchData();
+        setHoraSync(new Date().toLocaleTimeString('es-AR'));
     }, [fetchData]);
 
-    // Canal disponibilidad
-    useEffect(() => {
-        const canal = supabase
-            .channel('disp-recepcion')
-            .on(
-                'postgres_changes',
-                {
-                    event: '*',
-                    schema: 'public',
-                    table: 'disponibilidad'
-                },
-                () => actualizarSiNoHayFormulario()
-            )
-            .subscribe();
-
-        return () => { supabase.removeChannel(canal); };
-    }, []);
-
-    // Canal visitas — solo cuando hay fecha seleccionada
-    useEffect(() => {
-        if (!selectedDate) return;
-
-        const canal = supabase
-            .channel(`visitas-${selectedDate}`)
-            .on(
-                'postgres_changes',
-                {
-                    event: '*',
-                    schema: 'public',
-                    table: 'visitas',
-                    filter: `fecha=eq.${selectedDate}`
-                },
-                () => actualizarSiNoHayFormulario()
-            )
-            .subscribe();
-
-        return () => { supabase.removeChannel(canal); };
-    }, [selectedDate]);
-
-    // Polling de respaldo silencioso — cada 60 segundos
+    // Polling cada 10 segundos
+    // — rápido pero sin saturar
     useEffect(() => {
         const intervalo = setInterval(() => {
-            actualizarSiNoHayFormulario();
-        }, 60000);
+            sincronizar();
+        }, 10000);
 
         return () => clearInterval(intervalo);
-    }, [selectedDate]);
+    }, [selectedDate]); // Se incluye selectedDate para que sincronizar esté al día
 
-    // Visibilitychange — al volver a la pestaña
+    // Al volver a la pestaña después de tenerla en segundo plano
     useEffect(() => {
         function handleVisibility() {
             if (document.visibilityState === 'visible') {
-                actualizarSiNoHayFormulario();
+                sincronizar();
             }
         }
-        document.addEventListener(
-            'visibilitychange', handleVisibility
-        );
-        return () => document.removeEventListener(
-            'visibilitychange', handleVisibility
-        );
+        document.addEventListener('visibilitychange', handleVisibility);
+        return () => document.removeEventListener('visibilitychange', handleVisibility);
     }, [selectedDate]);
 
     const getTurnos = (date: string): TurnoStatus[] => {
@@ -190,6 +154,7 @@ function ReservasContent() {
         formularioAbierto.current = false;
         pendienteActualizacion.current = false;
         fetchData();
+        setHoraSync(new Date().toLocaleTimeString('es-AR'));
     };
 
     const handleUpdateReserva = async (data: ReservaFormData & { fecha: string; horario: string }) => {
@@ -215,6 +180,7 @@ function ReservasContent() {
         formularioAbierto.current = false;
         pendienteActualizacion.current = false;
         fetchData();
+        setHoraSync(new Date().toLocaleTimeString('es-AR'));
     };
 
     const handleDelete = (id: string) => {
@@ -264,13 +230,31 @@ function ReservasContent() {
             <main className="lg:ml-[240px] pt-14 lg:pt-0 min-h-screen">
                 <div className="p-4 md:p-6 lg:p-8 max-w-7xl mx-auto">
                     {/* Header */}
-                    <div className="mb-6">
-                        <h1 className="text-xl md:text-2xl font-bold" style={{ color: 'var(--color-text)' }}>
-                            Agenda de Reservas
-                        </h1>
-                        <p className="text-sm mt-1" style={{ color: 'var(--color-text-secondary)' }}>
-                            Huentala Wines Bodega Urbana — Panel de Recepción
-                        </p>
+                    <div className="flex flex-wrap items-center justify-between gap-4">
+                        <div>
+                            <h1 className="text-xl md:text-2xl font-bold" style={{ color: 'var(--color-text)' }}>
+                                Agenda de Reservas
+                            </h1>
+                            <p className="text-sm mt-1" style={{ color: 'var(--color-text-secondary)' }}>
+                                Huentala Wines Bodega Urbana — Panel de Recepción
+                            </p>
+                        </div>
+                        <div className="flex items-center gap-3">
+                            <div className="text-xs font-medium px-3 py-1.5 rounded-full border bg-white/50 backdrop-blur-sm" style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-secondary)' }}>
+                                <span className="inline-block w-2 h-2 rounded-full bg-green-500 mr-2 animate-pulse"></span>
+                                Actualizado: {horaSync || '--:--:--'}
+                            </div>
+                            <button
+                                onClick={() => sincronizar()}
+                                className="p-1.5 rounded-lg border bg-white hover:bg-gray-50 transition-colors"
+                                style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-secondary)' }}
+                                title="Actualizar ahora"
+                            >
+                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                </svg>
+                            </button>
+                        </div>
                     </div>
 
                     {loading ? (
@@ -339,6 +323,7 @@ function ReservasContent() {
                                                 formularioAbierto.current = false;
                                                 if (pendienteActualizacion.current) {
                                                     fetchData();
+                                                    setHoraSync(new Date().toLocaleTimeString('es-AR'));
                                                     pendienteActualizacion.current = false;
                                                 }
                                             }}
@@ -356,6 +341,7 @@ function ReservasContent() {
                                                 formularioAbierto.current = false;
                                                 if (pendienteActualizacion.current) {
                                                     fetchData();
+                                                    setHoraSync(new Date().toLocaleTimeString('es-AR'));
                                                     pendienteActualizacion.current = false;
                                                 }
                                             }}
