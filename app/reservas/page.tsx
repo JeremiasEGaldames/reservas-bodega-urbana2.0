@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { addMonths, subMonths, format } from 'date-fns';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import Navbar from '@/components/Navbar';
@@ -29,6 +29,8 @@ function ReservasContent() {
     const [visitas, setVisitas] = useState<Visita[]>([]);
     const [loading, setLoading] = useState(true);
     const [editingVisita, setEditingVisita] = useState<Visita | null>(null);
+    const [mostrarForm, setMostrarForm] = useState(false);
+    const formularioAbierto = useRef(false);
     const [confirmModal, setConfirmModal] = useState<{
         open: boolean;
         title: string;
@@ -74,6 +76,7 @@ function ReservasContent() {
             dispChannel = supabase
                 .channel('disponibilidad-changes')
                 .on('postgres_changes', { event: '*', schema: 'public', table: 'disponibilidad' }, () => {
+                    if (formularioAbierto.current) return;
                     fetchData();
                 })
                 .subscribe((status) => {
@@ -94,6 +97,7 @@ function ReservasContent() {
             visitasChannel = supabase
                 .channel('visitas-changes')
                 .on('postgres_changes', { event: '*', schema: 'public', table: 'visitas' }, () => {
+                    if (formularioAbierto.current) return;
                     fetchData();
                 })
                 .subscribe((status) => {
@@ -115,6 +119,7 @@ function ReservasContent() {
 
         // Polling de respaldo cada 30 segundos (Capa 2)
         const intervalo = setInterval(() => {
+            if (formularioAbierto.current) return;
             fetchData();
         }, 30000);
 
@@ -129,7 +134,7 @@ function ReservasContent() {
     useEffect(() => {
         function handleVisibilityChange() {
             if (document.visibilityState === 'visible') {
-                console.log('Pestaña visible — recargando datos');
+                if (formularioAbierto.current) return;
                 fetchData();
             }
         }
@@ -181,6 +186,8 @@ function ReservasContent() {
         });
 
         if (error) throw error;
+        setMostrarForm(false);
+        formularioAbierto.current = false;
         fetchData();
     };
 
@@ -203,6 +210,8 @@ function ReservasContent() {
 
         if (error) throw error;
         setEditingVisita(null);
+        setMostrarForm(false);
+        formularioAbierto.current = false;
         fetchData();
     };
 
@@ -278,6 +287,8 @@ function ReservasContent() {
                                     onSelectDate={(date) => {
                                         setSelectedDate(date);
                                         setEditingVisita(null); // Reset admin mode on date change
+                                        setMostrarForm(true);
+                                        formularioAbierto.current = true;
                                     }}
                                     onPrevMonth={() => setCurrentMonth(subMonths(currentMonth, 1))}
                                     onNextMonth={() => setCurrentMonth(addMonths(currentMonth, 1))}
@@ -302,7 +313,11 @@ function ReservasContent() {
                                                 selectedDate={selectedDate}
                                                 showActions={true}
                                                 onDelete={handleDelete}
-                                                onEdit={(v) => setEditingVisita(v)}
+                                                onEdit={(v) => {
+                                                    setEditingVisita(v);
+                                                    setMostrarForm(true);
+                                                    formularioAbierto.current = true;
+                                                }}
                                                 onChangeStatus={handleChangeStatus}
                                             />
                                         </div>
@@ -312,11 +327,15 @@ function ReservasContent() {
 
                             {/* Right sidebar */}
                             <div className="space-y-6">
-                                {selectedDate ? (
+                                {selectedDate && mostrarForm ? (
                                     <>
                                         <DayDetailPanel
                                             selectedDate={selectedDate}
                                             turnos={turnos}
+                                            onClose={() => {
+                                                setMostrarForm(false);
+                                                formularioAbierto.current = false;
+                                            }}
                                         />
                                         <ReservationForm
                                             key={editingVisita ? `edit-${editingVisita.id}` : 'new'} // Force re-render on mode change
@@ -325,7 +344,11 @@ function ReservasContent() {
                                             initialData={initialFormData}
                                             isEditing={!!editingVisita}
                                             onSubmit={editingVisita ? handleUpdateReserva : handleCreateReserva}
-                                            onCancel={editingVisita ? () => setEditingVisita(null) : undefined}
+                                            onCancel={() => {
+                                                setEditingVisita(null);
+                                                setMostrarForm(false);
+                                                formularioAbierto.current = false;
+                                            }}
                                         />
                                     </>
                                 ) : (

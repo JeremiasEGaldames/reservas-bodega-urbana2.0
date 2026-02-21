@@ -93,26 +93,23 @@ insert into public.configuracion (clave, valor) values
 -- This SQL script provides structure primarily.
 
 -- Added validation triggers for security
--- Función que valida antes de insertar una visita
-CREATE OR REPLACE FUNCTION validar_reserva_permitida()
+-- Función para INSERT (reserva nueva)
+CREATE OR REPLACE FUNCTION validar_reserva_insert()
 RETURNS TRIGGER AS $$
 DECLARE
   v_turno disponibilidad%ROWTYPE;
   v_huespedes_actuales INT;
 BEGIN
-  -- Buscar el turno correspondiente
   SELECT * INTO v_turno
   FROM disponibilidad
   WHERE fecha = NEW.fecha
     AND idioma = NEW.idioma;
 
-  -- Si no existe el turno, rechazar
   IF NOT FOUND THEN
     RAISE EXCEPTION
       'El turno solicitado no existe.';
   END IF;
 
-  -- Si está bloqueado, rechazar
   IF v_turno.bloqueada THEN
     RAISE EXCEPTION
       'Este día está bloqueado: %',
@@ -120,19 +117,18 @@ BEGIN
         'Sin motivo especificado');
   END IF;
 
-  -- Si los cupos están cerrados, rechazar
   IF v_turno.cupos_cerrados THEN
     RAISE EXCEPTION
       'Los cupos de este turno están cerrados.';
   END IF;
 
-  -- Si no está disponible, rechazar
   IF NOT v_turno.disponible THEN
     RAISE EXCEPTION
       'Este turno no está disponible.';
   END IF;
 
-  -- Contar huéspedes actuales del turno
+  -- Para INSERT: contar TODAS las reservas activas
+  -- del turno sin exclusiones
   SELECT COALESCE(SUM(cantidad_huespedes), 0)
   INTO v_huespedes_actuales
   FROM visitas
@@ -140,11 +136,11 @@ BEGIN
     AND idioma = NEW.idioma
     AND estado != 'cancelada';
 
-  -- Verificar si hay cupos suficientes
   IF (v_huespedes_actuales + NEW.cantidad_huespedes)
       > v_turno.capacidad_maxima THEN
     RAISE EXCEPTION
-      'No hay suficientes cupos. Disponibles: %, Solicitados: %',
+      'No hay cupos suficientes. '
+      'Disponibles: %, Solicitados: %',
       (v_turno.capacidad_maxima - v_huespedes_actuales),
       NEW.cantidad_huespedes;
   END IF;
@@ -153,11 +149,73 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- Aplicar el trigger en la tabla visitas
-DROP TRIGGER IF EXISTS
-  trigger_validar_reserva ON visitas;
+-- Función para UPDATE (edición de reserva existente)
+CREATE OR REPLACE FUNCTION validar_reserva_update()
+RETURNS TRIGGER AS $$
+DECLARE
+  v_turno disponibilidad%ROWTYPE;
+  v_huespedes_actuales INT;
+BEGIN
+  SELECT * INTO v_turno
+  FROM disponibilidad
+  WHERE fecha = NEW.fecha
+    AND idioma = NEW.idioma;
 
-CREATE TRIGGER trigger_validar_reserva
+  IF NOT FOUND THEN
+    RAISE EXCEPTION
+      'El turno solicitado no existe.';
+  END IF;
+
+  IF v_turno.bloqueada THEN
+    RAISE EXCEPTION
+      'Este día está bloqueado: %',
+      COALESCE(v_turno.motivo_bloqueo,
+        'Sin motivo especificado');
+  END IF;
+
+  IF v_turno.cupos_cerrados THEN
+    RAISE EXCEPTION
+      'Los cupos de este turno están cerrados.';
+  END IF;
+
+  IF NOT v_turno.disponible THEN
+    RAISE EXCEPTION
+      'Este turno no está disponible.';
+  END IF;
+
+  -- Para UPDATE: excluir la reserva que se edita
+  -- usando OLD.id (aquí SÍ existe el id)
+  SELECT COALESCE(SUM(cantidad_huespedes), 0)
+  INTO v_huespedes_actuales
+  FROM visitas
+  WHERE fecha = NEW.fecha
+    AND idioma = NEW.idioma
+    AND estado != 'cancelada'
+    AND id != OLD.id;
+
+  IF (v_huespedes_actuales + NEW.cantidad_huespedes)
+      > v_turno.capacidad_maxima THEN
+    RAISE EXCEPTION
+      'No hay cupos suficientes. '
+      'Disponibles: %, Solicitados: %',
+      (v_turno.capacidad_maxima - v_huespedes_actuales),
+      NEW.cantidad_huespedes;
+  END IF;
+
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Trigger para INSERT
+DROP TRIGGER IF EXISTS trigger_validar_reserva_insert ON visitas;
+CREATE TRIGGER trigger_validar_reserva_insert
   BEFORE INSERT ON visitas
   FOR EACH ROW
-  EXECUTE FUNCTION validar_reserva_permitida();
+  EXECUTE FUNCTION validar_reserva_insert();
+
+-- Trigger separado para UPDATE
+DROP TRIGGER IF EXISTS trigger_validar_reserva_update ON visitas;
+CREATE TRIGGER trigger_validar_reserva_update
+  BEFORE UPDATE ON visitas
+  FOR EACH ROW
+  EXECUTE FUNCTION validar_reserva_update();
