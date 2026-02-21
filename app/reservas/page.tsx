@@ -74,8 +74,8 @@ function ReservasContent() {
     }, [fetchData]);
 
     // useCallback estable (sin dependencias) para evitar stale closures en setInterval y event listeners
-    const sincronizar = useCallback((forzar = false) => {
-        if (!forzar && formularioAbierto.current) {
+    const sincronizar = useCallback(() => {
+        if (formularioAbierto.current) {
             pendienteActualizacion.current = true;
             return;
         }
@@ -125,8 +125,12 @@ function ReservasContent() {
 
             if (data.updated_at !== ultimoSignal.current && ultimoSignal.current !== '') {
                 ultimoSignal.current = data.updated_at;
-                const esCritico = motivosCriticos.includes(data.motivo);
-                sincronizarRef.current(esCritico);
+                if (motivosCriticos.includes(data.motivo)) {
+                    // Cambio crítico del admin: recargar la página para reflejar el estado actualizado
+                    window.location.reload();
+                } else {
+                    sincronizarRef.current();
+                }
             }
         }, 5000);
 
