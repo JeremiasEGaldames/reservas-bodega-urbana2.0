@@ -11,6 +11,7 @@ import ReservationList from '@/components/ReservationList';
 import ConfirmModal from '@/components/ConfirmModal';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth';
+import { emitirSyncSignal } from '@/lib/syncSignal';
 import type { Disponibilidad, Visita, TurnoStatus, ReservaFormData } from '@/lib/types';
 
 export default function ReservasPage() {
@@ -176,6 +177,7 @@ function ReservasContent() {
         });
 
         if (error) throw error;
+        await emitirSyncSignal('nueva_reserva');
         setMostrarForm(false);
         formularioAbierto.current = false;
         pendienteActualizacion.current = false;
@@ -201,6 +203,7 @@ function ReservasContent() {
         }).eq('id', editingVisita.id);
 
         if (error) throw error;
+        await emitirSyncSignal('editar_reserva');
         setEditingVisita(null);
         setMostrarForm(false);
         formularioAbierto.current = false;
@@ -223,6 +226,7 @@ function ReservasContent() {
                 }
                 setConfirmModal((prev) => ({ ...prev, open: false }));
                 if (editingVisita?.id === id) setEditingVisita(null);
+                await emitirSyncSignal('eliminar_reserva');
                 fetchData();
             },
         });
@@ -233,6 +237,7 @@ function ReservasContent() {
             estado,
             updated_at: new Date().toISOString()
         }).eq('id', id);
+        await emitirSyncSignal('editar_reserva');
         fetchData();
     };
 
