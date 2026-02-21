@@ -264,6 +264,17 @@ export function CalendarioTab({ currentMonth, setCurrentMonth, selectedDate, set
         fetchData();
     };
 
+    const handleUpdateHorario = async (id: string, newHorario: string) => {
+        if (!newHorario) return;
+        const formatted = newHorario.length === 5 ? `${newHorario}:00` : newHorario;
+        const { error } = await supabase.from('disponibilidad').update({ horario: formatted }).eq('id', id);
+        if (error) {
+            console.error('Error updating horario:', error);
+            alert(`Error al actualizar horario: ${error.message}`);
+        }
+        fetchData();
+    };
+
     const handleToggleCupos = async (id: string, closed: boolean) => {
         const { error } = await supabase.from('disponibilidad').update({ cupos_cerrados: closed }).eq('id', id);
         if (error) {
@@ -347,11 +358,32 @@ export function CalendarioTab({ currentMonth, setCurrentMonth, selectedDate, set
                                 {turnos.map((t) => (
                                     <div key={t.id} className="p-3 rounded-lg mb-2" style={{ background: 'var(--color-bg)', border: '1px solid var(--color-border-light)' }}>
                                         <div className="flex items-center justify-between mb-2">
-                                            <span className="text-sm font-medium">{t.idioma === 'pt' ? '🇧🇷 PT' : t.idioma === 'es' ? '🇦🇷 ES' : '🇬🇧 EN'} {t.horario?.slice(0, 5)}</span>
+                                            <span className="text-sm font-bold" style={{ color: 'var(--color-primary)' }}>
+                                                {t.idioma === 'pt' ? 'Português' : t.idioma === 'es' ? 'Español' : 'English'}
+                                            </span>
                                         </div>
-                                        <div className="flex items-center gap-2 mb-2">
-                                            <label className="text-xs" style={{ color: 'var(--color-text-secondary)' }}>Cupos:</label>
-                                            <input type="number" min={0} value={t.capacidad_maxima} onChange={(e) => handleUpdateCapacidad(t.id, parseInt(e.target.value) || 0)} className="w-16 px-2 py-1 text-sm rounded-md" style={{ border: '1px solid var(--color-border)', background: 'var(--color-surface)' }} />
+                                        <div className="grid grid-cols-2 gap-2 mb-2">
+                                            <div>
+                                                <label className="block text-[10px] uppercase font-bold mb-1" style={{ color: 'var(--color-text-secondary)' }}>Hora</label>
+                                                <input
+                                                    type="time"
+                                                    value={t.horario?.slice(0, 5)}
+                                                    onChange={(e) => handleUpdateHorario(t.id, e.target.value)}
+                                                    className="w-full px-2 py-1 text-sm rounded-md outline-none transition-all"
+                                                    style={{ border: '1px solid var(--color-border)', background: 'var(--color-surface)', color: 'var(--color-text)' }}
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-[10px] uppercase font-bold mb-1" style={{ color: 'var(--color-text-secondary)' }}>Cupos</label>
+                                                <input
+                                                    type="number"
+                                                    min={0}
+                                                    value={t.capacidad_maxima}
+                                                    onChange={(e) => handleUpdateCapacidad(t.id, parseInt(e.target.value) || 0)}
+                                                    className="w-full px-2 py-1 text-sm rounded-md outline-none transition-all"
+                                                    style={{ border: '1px solid var(--color-border)', background: 'var(--color-surface)', color: 'var(--color-text)' }}
+                                                />
+                                            </div>
                                         </div>
                                         <div className="flex gap-2">
                                             <button onClick={() => handleToggleCupos(t.id, !t.cupos_cerrados)} className="text-[11px] px-2 py-1 rounded-md font-medium cursor-pointer" style={{ background: t.cupos_cerrados ? 'var(--color-danger-light)' : 'var(--color-success-light)', color: t.cupos_cerrados ? 'var(--color-danger)' : '#065f46' }}>
