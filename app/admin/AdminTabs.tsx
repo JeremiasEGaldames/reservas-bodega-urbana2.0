@@ -255,6 +255,8 @@ export function CalendarioTab({ currentMonth, setCurrentMonth, selectedDate, set
     const [bulkDays, setBulkDays] = useState(90);
     const [bulkLoading, setBulkLoading] = useState(false);
     const [blockModal, setBlockModal] = useState<{ open: boolean; fecha: string; motivo: string }>({ open: false, fecha: '', motivo: '' });
+    const [confirmAction, setConfirmAction] = useState<{ open: boolean; title: string; message: string; onConfirm: () => Promise<void> }>({ open: false, title: '', message: '', onConfirm: async () => { } });
+    const [confirmLoading, setConfirmLoading] = useState(false);
 
     const turnos = selectedDate ? getTurnos(selectedDate, disponibilidad, visitas) : [];
 
@@ -269,52 +271,84 @@ export function CalendarioTab({ currentMonth, setCurrentMonth, selectedDate, set
         fetchData();
     };
 
-    const handleUpdateHorario = async (id: string, newHorario: string) => {
+    const handleUpdateHorario = (id: string, newHorario: string) => {
         if (!newHorario) return;
         const formatted = newHorario.length === 5 ? `${newHorario}:00` : newHorario;
-        const { error } = await supabase.from('disponibilidad').update({ horario: formatted }).eq('id', id);
-        if (error) {
-            console.error('Error updating horario:', error);
-            alert(`Error al actualizar horario: ${error.message}`);
-        } else {
-            await emitirSyncSignal('mod_disponibilidad');
-        }
-        fetchData();
+        setConfirmAction({
+            open: true,
+            title: 'Cambiar horario',
+            message: `¿Confirmás el cambio de horario a ${newHorario}? Esta acción actualizará la vista del panel de Recepción.`,
+            onConfirm: async () => {
+                const { error } = await supabase.from('disponibilidad').update({ horario: formatted }).eq('id', id);
+                if (error) {
+                    console.error('Error updating horario:', error);
+                    alert(`Error al actualizar horario: ${error.message}`);
+                } else {
+                    await emitirSyncSignal('mod_disponibilidad');
+                }
+                fetchData();
+            },
+        });
     };
 
-    const handleToggleCupos = async (id: string, closed: boolean) => {
-        const { error } = await supabase.from('disponibilidad').update({ cupos_cerrados: closed }).eq('id', id);
-        if (error) {
-            console.error('Error toggling quotas:', error);
-            alert(`Error al cambiar estado de cupos: ${error.message}`);
-        } else {
-            await emitirSyncSignal(closed ? 'cierre_cupos' : 'apertura_cupos');
-        }
-        fetchData();
+    const handleToggleCupos = (id: string, closed: boolean) => {
+        setConfirmAction({
+            open: true,
+            title: closed ? 'Cerrar cupos' : 'Abrir cupos',
+            message: closed
+                ? '¿Confirmás el cierre de cupos para este turno? El panel de Recepción se actualizará automáticamente.'
+                : '¿Confirmás la apertura de cupos para este turno? El panel de Recepción se actualizará automáticamente.',
+            onConfirm: async () => {
+                const { error } = await supabase.from('disponibilidad').update({ cupos_cerrados: closed }).eq('id', id);
+                if (error) {
+                    console.error('Error toggling quotas:', error);
+                    alert(`Error al cambiar estado de cupos: ${error.message}`);
+                } else {
+                    await emitirSyncSignal(closed ? 'cierre_cupos' : 'apertura_cupos');
+                }
+                fetchData();
+            },
+        });
     };
 
-    const handleBlockDay = async () => {
+    const handleBlockDay = () => {
         if (!blockModal.fecha) return;
-        const { error } = await supabase.from('disponibilidad').update({ bloqueada: true, motivo_bloqueo: blockModal.motivo || null }).eq('fecha', blockModal.fecha);
-        if (error) {
-            console.error('Error blocking day:', error);
-            alert(`Error al bloquear el día: ${error.message}`);
-            return;
-        }
-        await emitirSyncSignal('bloqueo_dia');
+        const fechaLocal = blockModal.fecha;
+        const motivoLocal = blockModal.motivo;
         setBlockModal({ open: false, fecha: '', motivo: '' });
-        fetchData();
+        setConfirmAction({
+            open: true,
+            title: 'Confirmar bloqueo de día',
+            message: `¿Confirmás el bloqueo del día ${fechaLocal}? El panel de Recepción se actualizará automáticamente.`,
+            onConfirm: async () => {
+                const { error } = await supabase.from('disponibilidad').update({ bloqueada: true, motivo_bloqueo: motivoLocal || null }).eq('fecha', fechaLocal);
+                if (error) {
+                    console.error('Error blocking day:', error);
+                    alert(`Error al bloquear el día: ${error.message}`);
+                    return;
+                }
+                await emitirSyncSignal('bloqueo_dia');
+                fetchData();
+            },
+        });
     };
 
-    const handleUnblockDay = async (fecha: string) => {
-        const { error } = await supabase.from('disponibilidad').update({ bloqueada: false, motivo_bloqueo: null }).eq('fecha', fecha);
-        if (error) {
-            console.error('Error unblocking day:', error);
-            alert(`Error al desbloquear el día: ${error.message}`);
-        } else {
-            await emitirSyncSignal('desbloqueo_dia');
-        }
-        fetchData();
+    const handleUnblockDay = (fecha: string) => {
+        setConfirmAction({
+            open: true,
+            title: 'Desbloquear día',
+            message: `¿Confirmás el desbloqueo del día ${fecha}? El panel de Recepción se actualizará automáticamente.`,
+            onConfirm: async () => {
+                const { error } = await supabase.from('disponibilidad').update({ bloqueada: false, motivo_bloqueo: null }).eq('fecha', fecha);
+                if (error) {
+                    console.error('Error unblocking day:', error);
+                    alert(`Error al desbloquear el día: ${error.message}`);
+                } else {
+                    await emitirSyncSignal('desbloqueo_dia');
+                }
+                fetchData();
+            },
+        });
     };
 
     const handleGenerateBulk = async () => {
@@ -433,6 +467,50 @@ export function CalendarioTab({ currentMonth, setCurrentMonth, selectedDate, set
                         <div className="flex gap-3 justify-end">
                             <button onClick={() => setBlockModal({ ...blockModal, open: false })} className="px-4 py-2 text-sm rounded-lg cursor-pointer" style={{ border: '1px solid var(--color-border)' }}>Cancelar</button>
                             <button onClick={handleBlockDay} className="px-4 py-2 text-sm font-medium text-white rounded-lg cursor-pointer" style={{ background: 'var(--color-danger)' }}>Bloquear</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {confirmAction.open && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+                    <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={() => !confirmLoading && setConfirmAction({ ...confirmAction, open: false })} />
+                    <div className="relative w-full max-w-md p-6 rounded-xl animate-fade-in" style={{ background: 'var(--color-surface)', boxShadow: 'var(--shadow-lg)' }}>
+                        <div className="flex items-center gap-3 mb-4">
+                            <div className="flex items-center justify-center w-10 h-10 rounded-full flex-shrink-0" style={{ background: 'var(--color-warning-light, #fef3c7)' }}>
+                                <svg className="w-5 h-5" style={{ color: 'var(--color-warning, #d97706)' }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" />
+                                </svg>
+                            </div>
+                            <h3 className="text-base font-semibold" style={{ color: 'var(--color-text)' }}>{confirmAction.title}</h3>
+                        </div>
+                        <p className="text-sm mb-2" style={{ color: 'var(--color-text-secondary)' }}>{confirmAction.message}</p>
+                        <p className="text-xs mb-5 font-medium" style={{ color: 'var(--color-warning, #d97706)' }}>
+                            ⚠️ El panel de Recepción se recargará automáticamente al confirmar.
+                        </p>
+                        <div className="flex gap-3 justify-end">
+                            <button
+                                onClick={() => setConfirmAction({ ...confirmAction, open: false })}
+                                disabled={confirmLoading}
+                                className="px-4 py-2 text-sm rounded-lg cursor-pointer disabled:opacity-50"
+                                style={{ border: '1px solid var(--color-border)', color: 'var(--color-text-secondary)' }}
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                onClick={async () => {
+                                    setConfirmLoading(true);
+                                    await confirmAction.onConfirm();
+                                    setConfirmLoading(false);
+                                    setConfirmAction({ ...confirmAction, open: false });
+                                }}
+                                disabled={confirmLoading}
+                                className="px-4 py-2 text-sm font-medium text-white rounded-lg cursor-pointer disabled:opacity-60 flex items-center gap-2"
+                                style={{ background: 'var(--color-primary)' }}
+                            >
+                                {confirmLoading && <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin inline-block" />}
+                                Confirmar
+                            </button>
                         </div>
                     </div>
                 </div>
