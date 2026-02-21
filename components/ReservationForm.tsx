@@ -320,7 +320,7 @@ export default function ReservationForm({
                     )}
 
                     {/* Cantidad & Turno */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 gap-4">
                         <div>
                             <label className="block text-sm font-medium mb-1.5" style={{ color: 'var(--color-text)' }}>
                                 Cantidad de huéspedes *
@@ -338,7 +338,7 @@ export default function ReservationForm({
                             />
                         </div>
                         <div>
-                            <label className="block text-sm font-medium mb-1.5" style={{ color: 'var(--color-text)' }}>
+                            <label className="block text-sm font-medium mb-2" style={{ color: 'var(--color-text)' }}>
                                 Turno / Idioma *
                             </label>
                             <div className="flex gap-2">
@@ -351,20 +351,18 @@ export default function ReservationForm({
                                             type="button"
                                             disabled={isDisabled}
                                             onClick={() => setForm({ ...form, idioma: turno.idioma as IdiomaType })}
-                                            className={`flex-1 px-3 py-2.5 text-sm font-medium rounded-lg transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed`}
+                                            className={`flex-1 flex flex-col items-center justify-center p-2 rounded-lg transition-all cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed`}
                                             style={{
                                                 background: isSelected ? 'var(--color-primary)' : 'var(--color-bg)',
                                                 color: isSelected ? 'white' : 'var(--color-text)',
                                                 border: `1px solid ${isSelected ? 'var(--color-primary)' : 'var(--color-border)'}`,
+                                                minHeight: '64px'
                                             }}
                                         >
-                                            <div>{turno.horario.slice(0, 5)}</div>
-                                            <div className="text-[11px] opacity-80 mt-0.5">
-                                                {turno.idioma === 'pt' ? '🇧🇷 Português' :
-                                                    turno.idioma === 'es' ? '🇦🇷 Español' : '🇬🇧 English'}
-                                            </div>
-                                            <div className="text-[10px] opacity-60 mt-0.5">
-                                                {turno.cupos_disponibles} cupos
+                                            <div className="text-sm font-bold leading-none">{turno.horario.slice(0, 5)}</div>
+                                            <div className="text-[11px] font-medium mt-1 leading-none opacity-90">
+                                                {turno.idioma === 'pt' ? 'Português' :
+                                                    turno.idioma === 'es' ? 'Español' : 'English'}
                                             </div>
                                         </button>
                                     );
