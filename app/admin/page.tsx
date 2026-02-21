@@ -69,27 +69,43 @@ function AdminContent() {
         fetchData();
     }, [fetchData]);
 
-    // Polling cada 10 segundos en admin
+    // Canales Realtime para Admin (Inmediato)
+    useEffect(() => {
+        const canalVisitas = supabase
+            .channel('visitas-admin')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'visitas' }, () => fetchData())
+            .subscribe();
+
+        const canalDisp = supabase
+            .channel('disp-admin')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'disponibilidad' }, () => fetchData())
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(canalVisitas);
+            supabase.removeChannel(canalDisp);
+        };
+    }, [fetchData]);
+
+    // Polling cada 10 segundos (Capa 2 de seguridad)
     useEffect(() => {
         const intervalo = setInterval(() => {
-            cargarVisitas();
-            cargarDisponibilidad();
+            fetchData();
         }, 10000);
 
         return () => clearInterval(intervalo);
-    }, []);
+    }, [fetchData]);
 
-    // Al volver a la pestaña
+    // Visibilitychange — al volver a la pestaña (Capa 3 de seguridad)
     useEffect(() => {
         function handleVisibility() {
             if (document.visibilityState === 'visible') {
-                cargarVisitas();
-                cargarDisponibilidad();
+                fetchData();
             }
         }
         document.addEventListener('visibilitychange', handleVisibility);
         return () => document.removeEventListener('visibilitychange', handleVisibility);
-    }, []);
+    }, [fetchData]);
 
     const handleChangeStatus = async (id: string, estado: Visita['estado']) => {
         await supabase.from('visitas').update({ estado, updated_at: new Date().toISOString() }).eq('id', id);

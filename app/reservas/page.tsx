@@ -81,17 +81,51 @@ function ReservasContent() {
         setHoraSync(new Date().toLocaleTimeString('es-AR'));
     }, [fetchData]);
 
-    // Polling cada 10 segundos
-    // — rápido pero sin saturar
+    // Canal Realtime para Disponibilidad (General)
+    useEffect(() => {
+        const canal = supabase
+            .channel('disp-recepcion')
+            .on(
+                'postgres_changes',
+                { event: '*', schema: 'public', table: 'disponibilidad' },
+                () => sincronizar()
+            )
+            .subscribe();
+
+        return () => { supabase.removeChannel(canal); };
+    }, []);
+
+    // Canal Realtime para Visitas (Filtrado por fecha seleccionada)
+    useEffect(() => {
+        if (!selectedDate) return;
+
+        const canal = supabase
+            .channel(`visitas-${selectedDate}`)
+            .on(
+                'postgres_changes',
+                {
+                    event: '*',
+                    schema: 'public',
+                    table: 'visitas',
+                    filter: `fecha=eq.${selectedDate}`
+                },
+                () => sincronizar()
+            )
+            .subscribe();
+
+        return () => { supabase.removeChannel(canal); };
+    }, [selectedDate]);
+
+    // Polling cada 10 segundos (Capa 2 de seguridad)
     useEffect(() => {
         const intervalo = setInterval(() => {
             sincronizar();
         }, 10000);
 
         return () => clearInterval(intervalo);
-    }, [selectedDate]); // Se incluye selectedDate para que sincronizar esté al día
+    }, [selectedDate]);
 
-    // Al volver a la pestaña después de tenerla en segundo plano
+    // Visibilitychange — al volver a la pestaña (Capa 3 de seguridad)
     useEffect(() => {
         function handleVisibility() {
             if (document.visibilityState === 'visible') {
