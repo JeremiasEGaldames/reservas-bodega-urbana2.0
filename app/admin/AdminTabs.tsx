@@ -39,7 +39,7 @@ export const getTurnos = (date: string, disponibilidad: Disponibilidad[], visita
             cupos_disponibles: cuposReales,
             motivo_bloqueo: d.motivo_bloqueo,
         };
-    });
+    }).sort((a, b) => a.horario.localeCompare(b.horario));
 };
 
 // --- Panel Tab ---

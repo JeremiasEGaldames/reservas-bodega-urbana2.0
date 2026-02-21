@@ -157,7 +157,7 @@ function ReservasContent() {
                 cupos_disponibles: Math.max(0, d.capacidad_maxima - reservas),
                 motivo_bloqueo: d.motivo_bloqueo,
             };
-        });
+        }).sort((a, b) => a.horario.localeCompare(b.horario));
     };
 
     // Helper para labels de idioma
