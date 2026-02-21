@@ -37,6 +37,7 @@ export const getTurnos = (date: string, disponibilidad: Disponibilidad[], visita
             capacidad_maxima: d.capacidad_maxima,
             reservas_count: reservas,
             cupos_disponibles: cuposReales,
+            motivo_bloqueo: d.motivo_bloqueo,
         };
     });
 };

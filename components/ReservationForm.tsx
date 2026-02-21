@@ -39,6 +39,14 @@ export default function ReservationForm({
     const selectedTurno = turnos.find((t) => t.idioma === form.idioma);
     const horario = selectedTurno?.horario || (form.idioma === 'es' ? '19:00:00' : '19:30:00');
 
+    const isBlocked = selectedTurno?.bloqueada || selectedTurno?.cupos_cerrados || !selectedTurno?.disponible || (selectedTurno && selectedTurno.cupos_disponibles <= 0);
+    const motivoBloqueo = selectedTurno?.motivo_bloqueo;
+    const blockMessage = isBlocked
+        ? (selectedTurno?.bloqueada && motivoBloqueo)
+            ? `Día bloqueado por ${motivoBloqueo}`
+            : "Día no disponible"
+        : null;
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (loading) return;
@@ -136,102 +144,119 @@ export default function ReservationForm({
                 </div>
             )}
 
+            {blockMessage && !success && (
+                <div
+                    className="mb-6 p-4 rounded-xl text-sm font-bold flex flex-col items-center gap-2 justify-center text-center animate-fade-in"
+                    style={{
+                        background: 'rgba(212,17,66,0.05)',
+                        border: '2px dashed var(--color-primary)',
+                        color: 'var(--color-primary)',
+                    }}
+                >
+                    <svg className="w-8 h-8 opacity-80 mb-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M18.364 18.364A9 9 0 0 0 5.636 5.636m12.728 12.728A9 9 0 0 1 5.636 5.636m12.728 12.728L5.636 5.636" />
+                    </svg>
+                    <span className="text-base uppercase tracking-wider">{blockMessage}</span>
+                    <p className="text-xs font-normal opacity-70">No se pueden recibir reservas en este estado.</p>
+                </div>
+            )}
+
             <form onSubmit={handleSubmit} className="space-y-4">
-                {/* Nombre & Apellido */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
-                        <label className="block text-sm font-medium mb-1.5" style={{ color: 'var(--color-text)' }}>
-                            Nombre *
-                        </label>
-                        <input
-                            type="text"
-                            value={form.nombre}
-                            onChange={(e) => setForm({ ...form, nombre: e.target.value })}
-                            className="w-full px-3.5 py-2.5 text-sm rounded-lg outline-none transition-all"
-                            style={inputStyle}
-                            onFocus={(e) => (e.target.style.borderColor = 'var(--color-primary)')}
-                            onBlur={(e) => (e.target.style.borderColor = 'var(--color-border)')}
-                            placeholder="Nombre del huésped"
-                            required
-                        />
-                    </div>
-                    <div>
-                        <label className="block text-sm font-medium mb-1.5" style={{ color: 'var(--color-text)' }}>
-                            Apellido *
-                        </label>
-                        <input
-                            type="text"
-                            value={form.apellido}
-                            onChange={(e) => setForm({ ...form, apellido: e.target.value })}
-                            className="w-full px-3.5 py-2.5 text-sm rounded-lg outline-none transition-all"
-                            style={inputStyle}
-                            onFocus={(e) => (e.target.style.borderColor = 'var(--color-primary)')}
-                            onBlur={(e) => (e.target.style.borderColor = 'var(--color-border)')}
-                            placeholder="Apellido del huésped"
-                            required
-                        />
-                    </div>
-                </div>
-
-                {/* Hotel */}
-                <div>
-                    <label className="block text-sm font-medium mb-1.5" style={{ color: 'var(--color-text)' }}>
-                        Hotel *
-                    </label>
-                    <select
-                        value={form.hotel}
-                        onChange={(e) => setForm({ ...form, hotel: e.target.value as HotelType })}
-                        className="w-full px-3.5 py-2.5 text-sm rounded-lg outline-none transition-all cursor-pointer"
-                        style={inputStyle}
-                    >
-                        {hotels.map((h) => (
-                            <option key={h} value={h}>
-                                {h}
-                            </option>
-                        ))}
-                    </select>
-                </div>
-
-                {/* Email & Teléfono for Externo */}
-                {form.hotel === 'Externo' && (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 animate-fade-in">
+                <fieldset disabled={!!isBlocked} className="space-y-4 border-none p-0 m-0">
+                    {/* Nombre & Apellido */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div>
                             <label className="block text-sm font-medium mb-1.5" style={{ color: 'var(--color-text)' }}>
-                                Email *
+                                Nombre *
                             </label>
                             <input
-                                type="email"
-                                value={form.email}
-                                onChange={(e) => setForm({ ...form, email: e.target.value })}
+                                type="text"
+                                value={form.nombre}
+                                onChange={(e) => setForm({ ...form, nombre: e.target.value })}
                                 className="w-full px-3.5 py-2.5 text-sm rounded-lg outline-none transition-all"
                                 style={inputStyle}
                                 onFocus={(e) => (e.target.style.borderColor = 'var(--color-primary)')}
                                 onBlur={(e) => (e.target.style.borderColor = 'var(--color-border)')}
-                                placeholder="email@ejemplo.com"
+                                placeholder="Nombre del huésped"
                                 required
                             />
                         </div>
                         <div>
                             <label className="block text-sm font-medium mb-1.5" style={{ color: 'var(--color-text)' }}>
-                                Teléfono *
+                                Apellido *
                             </label>
                             <input
-                                type="tel"
-                                value={form.telefono}
-                                onChange={(e) => setForm({ ...form, telefono: e.target.value })}
+                                type="text"
+                                value={form.apellido}
+                                onChange={(e) => setForm({ ...form, apellido: e.target.value })}
                                 className="w-full px-3.5 py-2.5 text-sm rounded-lg outline-none transition-all"
                                 style={inputStyle}
                                 onFocus={(e) => (e.target.style.borderColor = 'var(--color-primary)')}
                                 onBlur={(e) => (e.target.style.borderColor = 'var(--color-border)')}
-                                placeholder="+54 261 ..."
+                                placeholder="Apellido del huésped"
                                 required
                             />
                         </div>
                     </div>
-                )}
 
-                {/* Cantidad & Turno */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {/* Hotel */}
+                    <div>
+                        <label className="block text-sm font-medium mb-1.5" style={{ color: 'var(--color-text)' }}>
+                            Hotel *
+                        </label>
+                        <select
+                            value={form.hotel}
+                            onChange={(e) => setForm({ ...form, hotel: e.target.value as HotelType })}
+                            className="w-full px-3.5 py-2.5 text-sm rounded-lg outline-none transition-all cursor-pointer"
+                            style={inputStyle}
+                        >
+                            {hotels.map((h) => (
+                                <option key={h} value={h}>
+                                    {h}
+                                </option>
+                            ))}
+                        </select>
+                    </div>
+
+                    {/* Email & Teléfono for Externo */}
+                    {form.hotel === 'Externo' && (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 animate-fade-in">
+                            <div>
+                                <label className="block text-sm font-medium mb-1.5" style={{ color: 'var(--color-text)' }}>
+                                    Email *
+                                </label>
+                                <input
+                                    type="email"
+                                    value={form.email}
+                                    onChange={(e) => setForm({ ...form, email: e.target.value })}
+                                    className="w-full px-3.5 py-2.5 text-sm rounded-lg outline-none transition-all"
+                                    style={inputStyle}
+                                    onFocus={(e) => (e.target.style.borderColor = 'var(--color-primary)')}
+                                    onBlur={(e) => (e.target.style.borderColor = 'var(--color-border)')}
+                                    placeholder="email@ejemplo.com"
+                                    required
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium mb-1.5" style={{ color: 'var(--color-text)' }}>
+                                    Teléfono *
+                                </label>
+                                <input
+                                    type="tel"
+                                    value={form.telefono}
+                                    onChange={(e) => setForm({ ...form, telefono: e.target.value })}
+                                    className="w-full px-3.5 py-2.5 text-sm rounded-lg outline-none transition-all"
+                                    style={inputStyle}
+                                    onFocus={(e) => (e.target.style.borderColor = 'var(--color-primary)')}
+                                    onBlur={(e) => (e.target.style.borderColor = 'var(--color-border)')}
+                                    placeholder="+54 261 ..."
+                                    required
+                                />
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Cantidad de huéspedes */}
                     <div>
                         <label className="block text-sm font-medium mb-1.5" style={{ color: 'var(--color-text)' }}>
                             Cantidad de huéspedes *
@@ -248,56 +273,58 @@ export default function ReservationForm({
                             required
                         />
                     </div>
+
+                    {/* Notas */}
                     <div>
                         <label className="block text-sm font-medium mb-1.5" style={{ color: 'var(--color-text)' }}>
-                            Turno / Idioma *
+                            Notas adicionales
                         </label>
-                        <div className="flex gap-2">
-                            {turnos.map((turno) => {
-                                const isSelected = form.idioma === turno.idioma;
-                                const isDisabled = turno.bloqueada || turno.cupos_cerrados || !turno.disponible || turno.cupos_disponibles <= 0;
-                                return (
-                                    <button
-                                        key={turno.idioma}
-                                        type="button"
-                                        disabled={isDisabled}
-                                        onClick={() => setForm({ ...form, idioma: turno.idioma as IdiomaType })}
-                                        className={`flex-1 px-3 py-2.5 text-sm font-medium rounded-lg transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed`}
-                                        style={{
-                                            background: isSelected ? 'var(--color-primary)' : 'var(--color-bg)',
-                                            color: isSelected ? 'white' : 'var(--color-text)',
-                                            border: `1px solid ${isSelected ? 'var(--color-primary)' : 'var(--color-border)'}`,
-                                        }}
-                                    >
-                                        <div>{turno.horario.slice(0, 5)}</div>
-                                        <div className="text-[11px] opacity-80 mt-0.5">
-                                            {turno.idioma === 'es' ? '🇪🇸 Español' : '🇬🇧 Inglés'}
-                                        </div>
-                                        <div className="text-[10px] opacity-60 mt-0.5">
-                                            {turno.cupos_disponibles} cupos
-                                        </div>
-                                    </button>
-                                );
-                            })}
-                        </div>
+                        <textarea
+                            value={form.notas}
+                            onChange={(e) => setForm({ ...form, notas: e.target.value })}
+                            rows={3}
+                            className="w-full px-3.5 py-2.5 text-sm rounded-lg outline-none transition-all resize-none"
+                            style={inputStyle}
+                            onFocus={(e) => (e.target.style.borderColor = 'var(--color-primary)')}
+                            onBlur={(e) => (e.target.style.borderColor = 'var(--color-border)')}
+                            placeholder="Restricciones alimentarias, celebraciones, etc."
+                        />
                     </div>
-                </div>
+                </fieldset>
 
-                {/* Notas */}
+                {/* Turno Selector should NOT be in fieldset so user can switch to another turno if only one is blocked */}
                 <div>
                     <label className="block text-sm font-medium mb-1.5" style={{ color: 'var(--color-text)' }}>
-                        Notas adicionales
+                        Turno / Idioma *
                     </label>
-                    <textarea
-                        value={form.notas}
-                        onChange={(e) => setForm({ ...form, notas: e.target.value })}
-                        rows={3}
-                        className="w-full px-3.5 py-2.5 text-sm rounded-lg outline-none transition-all resize-none"
-                        style={inputStyle}
-                        onFocus={(e) => (e.target.style.borderColor = 'var(--color-primary)')}
-                        onBlur={(e) => (e.target.style.borderColor = 'var(--color-border)')}
-                        placeholder="Restricciones alimentarias, celebraciones, etc."
-                    />
+                    <div className="flex gap-2">
+                        {turnos.map((turno) => {
+                            const isSelected = form.idioma === turno.idioma;
+                            const isDisabled = turno.bloqueada || turno.cupos_cerrados || !turno.disponible || turno.cupos_disponibles <= 0;
+                            return (
+                                <button
+                                    key={turno.idioma}
+                                    type="button"
+                                    onClick={() => setForm({ ...form, idioma: turno.idioma as IdiomaType })}
+                                    className={`flex-1 px-3 py-2.5 text-sm font-medium rounded-lg transition-all cursor-pointer`}
+                                    style={{
+                                        background: isSelected ? 'var(--color-primary)' : 'var(--color-bg)',
+                                        color: isSelected ? 'white' : 'var(--color-text)',
+                                        border: `1px solid ${isSelected ? 'var(--color-primary)' : 'var(--color-border)'}`,
+                                        opacity: isDisabled && !isSelected ? 0.5 : 1
+                                    }}
+                                >
+                                    <div>{turno.horario.slice(0, 5)}</div>
+                                    <div className="text-[11px] opacity-80 mt-0.5">
+                                        {turno.idioma === 'es' ? '🇪🇸 Español' : '🇬🇧 Inglés'}
+                                    </div>
+                                    <div className="text-[10px] opacity-60 mt-0.5">
+                                        {turno.cupos_disponibles} cupos
+                                    </div>
+                                </button>
+                            );
+                        })}
+                    </div>
                 </div>
 
                 {/* Actions */}
@@ -317,7 +344,7 @@ export default function ReservationForm({
                     )}
                     <button
                         type="submit"
-                        disabled={loading}
+                        disabled={loading || !!isBlocked}
                         className="flex-1 py-2.5 px-4 text-sm font-semibold text-white rounded-lg transition-all disabled:opacity-60 cursor-pointer"
                         style={{
                             background: 'var(--color-primary)',
@@ -337,6 +364,6 @@ export default function ReservationForm({
                     </button>
                 </div>
             </form>
-        </div>
+        </div >
     );
 }

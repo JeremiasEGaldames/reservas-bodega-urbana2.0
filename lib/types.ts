@@ -81,6 +81,7 @@ export interface TurnoStatus {
     capacidad_maxima: number;
     reservas_count: number;
     cupos_disponibles: number;
+    motivo_bloqueo?: string | null;
 }
 
 export interface ReservaFormData {

@@ -159,6 +159,7 @@ function ReservasContent() {
                 capacidad_maxima: d.capacidad_maxima,
                 reservas_count: reservas,
                 cupos_disponibles: Math.max(0, d.capacidad_maxima - reservas),
+                motivo_bloqueo: d.motivo_bloqueo,
             };
         });
     };
