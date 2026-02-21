@@ -31,6 +31,7 @@ function ReservasContent() {
     const [editingVisita, setEditingVisita] = useState<Visita | null>(null);
     const [mostrarForm, setMostrarForm] = useState(false);
     const formularioAbierto = useRef(false);
+    const pendienteActualizacion = useRef(false);
     const [confirmModal, setConfirmModal] = useState<{
         open: boolean;
         title: string;
@@ -61,87 +62,81 @@ function ReservasContent() {
         setLoading(false);
     }, [currentMonth]);
 
+    function actualizarSiNoHayFormulario() {
+        if (formularioAbierto.current) {
+            pendienteActualizacion.current = true;
+            return;
+        }
+        fetchData();
+        pendienteActualizacion.current = false;
+    }
+
     useEffect(() => {
         fetchData();
     }, [fetchData]);
 
-    // Realtime subscriptions & Polling (Capas 1 y 2)
+    // Canal disponibilidad
     useEffect(() => {
-        let dispChannel: any;
-        let visitasChannel: any;
+        const canal = supabase
+            .channel('disp-recepcion')
+            .on(
+                'postgres_changes',
+                {
+                    event: '*',
+                    schema: 'public',
+                    table: 'disponibilidad'
+                },
+                () => actualizarSiNoHayFormulario()
+            )
+            .subscribe();
 
-        const subscribeDisp = () => {
-            dispChannel = supabase
-                .channel('disponibilidad-changes')
-                .on('postgres_changes', { event: '*', schema: 'public', table: 'disponibilidad' }, () => {
-                    if (formularioAbierto.current) return;
-                    fetchData();
-                })
-                .subscribe((status) => {
-                    if (status === 'SUBSCRIBED') {
-                        console.log('Realtime disponibilidad conectado');
-                    }
-                    if (status === 'CLOSED' || status === 'CHANNEL_ERROR') {
-                        console.warn('Realtime disponibilidad desconectado, reconectando...');
-                        setTimeout(() => {
-                            if (dispChannel) supabase.removeChannel(dispChannel);
-                            subscribeDisp();
-                        }, 3000);
-                    }
-                });
-        };
+        return () => { supabase.removeChannel(canal); };
+    }, []);
 
-        const subscribeVisitas = () => {
-            visitasChannel = supabase
-                .channel('visitas-changes')
-                .on('postgres_changes', { event: '*', schema: 'public', table: 'visitas' }, () => {
-                    if (formularioAbierto.current) return;
-                    fetchData();
-                })
-                .subscribe((status) => {
-                    if (status === 'SUBSCRIBED') {
-                        console.log('Realtime visitas conectado');
-                    }
-                    if (status === 'CLOSED' || status === 'CHANNEL_ERROR') {
-                        console.warn('Realtime visitas desconectado, reconectando...');
-                        setTimeout(() => {
-                            if (visitasChannel) supabase.removeChannel(visitasChannel);
-                            subscribeVisitas();
-                        }, 3000);
-                    }
-                });
-        };
+    // Canal visitas — solo cuando hay fecha seleccionada
+    useEffect(() => {
+        if (!selectedDate) return;
 
-        subscribeDisp();
-        subscribeVisitas();
+        const canal = supabase
+            .channel(`visitas-${selectedDate}`)
+            .on(
+                'postgres_changes',
+                {
+                    event: '*',
+                    schema: 'public',
+                    table: 'visitas',
+                    filter: `fecha=eq.${selectedDate}`
+                },
+                () => actualizarSiNoHayFormulario()
+            )
+            .subscribe();
 
-        // Polling de respaldo cada 30 segundos (Capa 2)
+        return () => { supabase.removeChannel(canal); };
+    }, [selectedDate]);
+
+    // Polling de respaldo silencioso — cada 60 segundos
+    useEffect(() => {
         const intervalo = setInterval(() => {
-            if (formularioAbierto.current) return;
-            fetchData();
-        }, 30000);
+            actualizarSiNoHayFormulario();
+        }, 60000);
 
-        return () => {
-            if (dispChannel) supabase.removeChannel(dispChannel);
-            if (visitasChannel) supabase.removeChannel(visitasChannel);
-            clearInterval(intervalo);
-        };
-    }, [fetchData]);
+        return () => clearInterval(intervalo);
+    }, [selectedDate]);
 
-    // Detector de visibilidad de pestaña (Capa 3)
+    // Visibilitychange — al volver a la pestaña
     useEffect(() => {
-        function handleVisibilityChange() {
+        function handleVisibility() {
             if (document.visibilityState === 'visible') {
-                if (formularioAbierto.current) return;
-                fetchData();
+                actualizarSiNoHayFormulario();
             }
         }
-
-        document.addEventListener('visibilitychange', handleVisibilityChange);
-        return () => {
-            document.removeEventListener('visibilitychange', handleVisibilityChange);
-        };
-    }, [fetchData]);
+        document.addEventListener(
+            'visibilitychange', handleVisibility
+        );
+        return () => document.removeEventListener(
+            'visibilitychange', handleVisibility
+        );
+    }, [selectedDate]);
 
     const getTurnos = (date: string): TurnoStatus[] => {
         const dayDisp = disponibilidad.filter((d) => d.fecha === date);
@@ -186,6 +181,7 @@ function ReservasContent() {
         if (error) throw error;
         setMostrarForm(false);
         formularioAbierto.current = false;
+        pendienteActualizacion.current = false;
         fetchData();
     };
 
@@ -210,6 +206,7 @@ function ReservasContent() {
         setEditingVisita(null);
         setMostrarForm(false);
         formularioAbierto.current = false;
+        pendienteActualizacion.current = false;
         fetchData();
     };
 
@@ -333,6 +330,10 @@ function ReservasContent() {
                                             onClose={() => {
                                                 setMostrarForm(false);
                                                 formularioAbierto.current = false;
+                                                if (pendienteActualizacion.current) {
+                                                    fetchData();
+                                                    pendienteActualizacion.current = false;
+                                                }
                                             }}
                                         />
                                         <ReservationForm
@@ -346,6 +347,10 @@ function ReservasContent() {
                                                 setEditingVisita(null);
                                                 setMostrarForm(false);
                                                 formularioAbierto.current = false;
+                                                if (pendienteActualizacion.current) {
+                                                    fetchData();
+                                                    pendienteActualizacion.current = false;
+                                                }
                                             }}
                                         />
                                     </>

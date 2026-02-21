@@ -42,7 +42,7 @@ function AdminContent() {
         onConfirm: () => void;
     }>({ open: false, title: '', message: '', onConfirm: () => { } });
 
-    const fetchData = useCallback(async () => {
+    const cargarDatos = useCallback(async () => {
         const startDate = format(subMonths(currentMonth, 2), 'yyyy-MM-01');
         const endDate = format(addMonths(currentMonth, 4), 'yyyy-MM-01');
 
@@ -60,84 +60,54 @@ function AdminContent() {
         setLoading(false);
     }, [currentMonth]);
 
+    const cargarVisitas = cargarDatos;
+    const cargarDisponibilidad = cargarDatos;
+
+    const fetchData = cargarDatos;
+
     useEffect(() => {
         fetchData();
     }, [fetchData]);
 
-    // Realtime logic & Polling (Capas 1 y 2)
+    // Canal visitas — siempre activo
     useEffect(() => {
-        let dispChannel: any;
-        let visitasChannel: any;
+        const canal = supabase
+            .channel('visitas-admin')
+            .on(
+                'postgres_changes',
+                {
+                    event: '*',
+                    schema: 'public',
+                    table: 'visitas'
+                },
+                () => {
+                    cargarVisitas();
+                }
+            )
+            .subscribe();
 
-        const subscribeDisp = () => {
-            dispChannel = supabase
-                .channel('admin-disp')
-                .on('postgres_changes', { event: '*', schema: 'public', table: 'disponibilidad' }, () => {
-                    fetchData();
-                })
-                .subscribe((status) => {
-                    if (status === 'SUBSCRIBED') {
-                        console.log('Realtime admin-disp conectado');
-                    }
-                    if (status === 'CLOSED' || status === 'CHANNEL_ERROR') {
-                        console.warn('Realtime admin-disp desconectado, reconectando...');
-                        setTimeout(() => {
-                            if (dispChannel) supabase.removeChannel(dispChannel);
-                            subscribeDisp();
-                        }, 3000);
-                    }
-                });
-        };
+        return () => { supabase.removeChannel(canal); };
+    }, []);
 
-        const subscribeVisitas = () => {
-            visitasChannel = supabase
-                .channel('admin-vis')
-                .on('postgres_changes', { event: '*', schema: 'public', table: 'visitas' }, () => {
-                    fetchData();
-                })
-                .subscribe((status) => {
-                    if (status === 'SUBSCRIBED') {
-                        console.log('Realtime admin-vis conectado');
-                    }
-                    if (status === 'CLOSED' || status === 'CHANNEL_ERROR') {
-                        console.warn('Realtime admin-vis desconectado, reconectando...');
-                        setTimeout(() => {
-                            if (visitasChannel) supabase.removeChannel(visitasChannel);
-                            subscribeVisitas();
-                        }, 3000);
-                    }
-                });
-        };
-
-        subscribeDisp();
-        subscribeVisitas();
-
-        // Polling de respaldo cada 30 segundos (Capa 2)
-        const intervalo = setInterval(() => {
-            fetchData();
-        }, 30000);
-
-        return () => {
-            if (dispChannel) supabase.removeChannel(dispChannel);
-            if (visitasChannel) supabase.removeChannel(visitasChannel);
-            clearInterval(intervalo);
-        };
-    }, [fetchData]);
-
-    // Detector de visibilidad de pestaña (Capa 3)
+    // Canal disponibilidad — siempre activo
     useEffect(() => {
-        function handleVisibilityChange() {
-            if (document.visibilityState === 'visible') {
-                console.log('Admin: Pestaña visible — recargando datos');
-                fetchData();
-            }
-        }
+        const canal = supabase
+            .channel('disp-admin')
+            .on(
+                'postgres_changes',
+                {
+                    event: '*',
+                    schema: 'public',
+                    table: 'disponibilidad'
+                },
+                () => {
+                    cargarDisponibilidad();
+                }
+            )
+            .subscribe();
 
-        document.addEventListener('visibilitychange', handleVisibilityChange);
-        return () => {
-            document.removeEventListener('visibilitychange', handleVisibilityChange);
-        };
-    }, [fetchData]);
+        return () => { supabase.removeChannel(canal); };
+    }, []);
 
     const handleChangeStatus = async (id: string, estado: Visita['estado']) => {
         await supabase.from('visitas').update({ estado, updated_at: new Date().toISOString() }).eq('id', id);
